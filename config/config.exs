@@ -1,5 +1,18 @@
 import Config
 
+# Logger Configuration  
+# MCP protocol uses stdout for JSON-RPC, so logs MUST go to stderr
+# Using OTP logger (Elixir 1.15+)
+config :logger,
+  level: :info,
+  handle_otp_reports: true,
+  handle_sasl_reports: true
+
+config :logger, :default_handler,
+  config: [
+    type: :standard_error
+  ]
+
 # Embedding Model Configuration
 # Choose from: :all_minilm_l6_v2 (default), :all_mpnet_base_v2, :codebert_base, :paraphrase_multilingual
 #

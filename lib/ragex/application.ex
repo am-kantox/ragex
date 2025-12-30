@@ -16,7 +16,9 @@ defmodule Ragex.Application do
       Ragex.VectorStore,
       # File system watcher for auto-reindex
       Ragex.Watcher,
-      # MCP server handles stdio communication
+      # MCP socket server for persistent connections
+      Ragex.MCP.SocketServer,
+      # MCP server handles stdio communication (for stdio-based clients)
       Ragex.MCP.Server
     ]
 

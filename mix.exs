@@ -30,7 +30,7 @@ defmodule Ragex.MixProject do
       {:exla, "~> 0.9"},
       # Doc / Test
       {:credo, "~> 1.5", only: :dev},
-      {:dialyxir, "~> 1.1", only: :dev}
+      {:dialyxir, "~> 1.1", only: :dev, runtime: false}
     ]
   end
 end

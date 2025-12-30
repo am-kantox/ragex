@@ -144,7 +144,7 @@ defmodule Ragex.MCP.Handlers.Tools do
           description: "List all currently watched directories",
           inputSchema: %{
             type: "object",
-            properties: {}
+            properties: %{}
           }
         },
         %{
@@ -186,7 +186,7 @@ defmodule Ragex.MCP.Handlers.Tools do
           description: "Get statistics about indexed embeddings",
           inputSchema: %{
             type: "object",
-            properties: {}
+            properties: %{}
           }
         },
         %{
@@ -218,7 +218,7 @@ defmodule Ragex.MCP.Handlers.Tools do
             "Get comprehensive graph statistics including PageRank and centrality metrics",
           inputSchema: %{
             type: "object",
-            properties: {}
+            properties: %{}
           }
         },
         %{

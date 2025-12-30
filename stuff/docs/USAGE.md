@@ -535,11 +535,11 @@ local ragex = require("user.ragex")
 
 -- Telescope picker for Ragex semantic search
 local function ragex_search()
-  local pickers = require("telescope.pickers")
-  local finders = require("telescope.finders")
-  local conf = require("telescope.config").values
-  local actions = require("telescope.actions")
-  local action_state = require("telescope.action_state")
+local pickers = require("telescope.pickers")
+local finders = require("telescope.finders")
+local conf = require("telescope.config").values
+local actions = require("telescope.actions")
+local action_state = require("telescope.actions.state")
 
   vim.ui.input({ prompt = "Ragex Search: " }, function(query)
     if not query then return end
@@ -897,12 +897,22 @@ vim.api.nvim_create_autocmd({ "BufWritePost" }, {
   end,
 })
 
--- Status line
-table.insert(lvim.builtin.lualine.sections.lualine_x, 1, {
-  function()
-    return ragex.config.enabled and "  Ragex" or ""
-  end,
-})
+-- Status line (with safe initialization)
+local function ragex_status()
+  if ragex.config.enabled then
+    return "  Ragex"
+  end
+  return ""
+end
+
+if lvim.builtin.lualine and lvim.builtin.lualine.sections and lvim.builtin.lualine.sections.lualine_x then
+  table.insert(lvim.builtin.lualine.sections.lualine_x, 1, ragex_status)
+else
+  lvim.builtin.lualine = lvim.builtin.lualine or {}
+  lvim.builtin.lualine.sections = lvim.builtin.lualine.sections or {}
+  lvim.builtin.lualine.sections.lualine_x = lvim.builtin.lualine.sections.lualine_x or {}
+  table.insert(lvim.builtin.lualine.sections.lualine_x, ragex_status)
+end
 ```
 
 ### 11. Project-Specific Configuration

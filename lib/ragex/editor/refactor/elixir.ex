@@ -224,7 +224,7 @@ defmodule Ragex.Editor.Refactor.Elixir do
     end
   end
 
-  defp arity_matches?(args, nil), do: true
+  defp arity_matches?(_args, nil), do: true
   defp arity_matches?(args, target_arity), do: length(args) == target_arity
 
   # Transform module names
