@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Wrapper script for Ragex MCP server
+# Ensures compilation output doesn't leak to stdio
+
+set -e
+
+# Get the script's directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+
+cd "$PROJECT_DIR"
+
+# Compile silently (send all output to stderr to not pollute stdio)
+mix compile >&2 2>&1
+
+# Run the server (now only JSON-RPC goes to stdout)
+exec mix run --no-halt --no-compile

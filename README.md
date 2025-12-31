@@ -204,6 +204,8 @@ Run the server (it will listen on stdin/stdout):
 mix run --no-halt
 ```
 
+**Note**: The stdio server is validated and production-ready. See [STDIO_VALIDATION.md](STDIO_VALIDATION.md) for testing details and MCPHub integration guide.
+
 ### MCP Protocol Example
 
 Initialize the server:
