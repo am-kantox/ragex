@@ -34,7 +34,7 @@ defmodule Mix.Tasks.Ragex.Cache.Stats do
   """
 
   use Mix.Task
-  alias Ragex.Embeddings.Persistence
+  alias Ragex.Embeddings.{Bumblebee, Persistence}
 
   @shortdoc "Display embedding cache statistics"
 
@@ -153,7 +153,7 @@ defmodule Mix.Tasks.Ragex.Cache.Stats do
 
     unless stats.valid? do
       IO.puts(
-        "⚠️  Cache is incompatible with the current embedding model (#{Ragex.Embeddings.Bumblebee.model_info().id})."
+        "⚠️  Cache is incompatible with the current embedding model (#{Bumblebee.model_info().id})."
       )
 
       IO.puts(

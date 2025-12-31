@@ -9,6 +9,8 @@ defmodule Ragex.Graph.Store do
   use GenServer
   require Logger
 
+  alias Ragex.Embeddings.{FileTracker, Persistence}
+
   @nodes_table :ragex_nodes
   @edges_table :ragex_edges
   @embeddings_table :ragex_embeddings
@@ -175,10 +177,10 @@ defmodule Ragex.Graph.Store do
     :ets.new(@embeddings_table, [:named_table, :set, :public, read_concurrency: true])
 
     # Initialize file tracker for incremental updates
-    Ragex.Embeddings.FileTracker.init()
+    FileTracker.init()
 
     # Attempt to load cached embeddings
-    case Ragex.Embeddings.Persistence.load() do
+    case Persistence.load() do
       {:ok, count} ->
         Logger.info("Graph store initialized with #{count} cached embeddings")
 
@@ -228,7 +230,7 @@ defmodule Ragex.Graph.Store do
   def terminate(reason, _state) do
     # Save embeddings to disk on normal shutdown
     if reason == :shutdown or reason == :normal do
-      case Ragex.Embeddings.Persistence.save(@embeddings_table) do
+      case Persistence.save(@embeddings_table) do
         {:ok, path} ->
           Logger.info("Embeddings saved to #{path}")
 

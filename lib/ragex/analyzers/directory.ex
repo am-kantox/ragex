@@ -10,7 +10,7 @@ defmodule Ragex.Analyzers.Directory do
   alias Ragex.Analyzers.Erlang, as: ErlangAnalyzer
   alias Ragex.Analyzers.JavaScript, as: JavaScriptAnalyzer
   alias Ragex.Analyzers.Python, as: PythonAnalyzer
-  alias Ragex.Embeddings.FileTracker
+  alias Ragex.Embeddings.{FileTracker, Helper}
   alias Ragex.Graph.Store
 
   @doc """
@@ -172,13 +172,14 @@ defmodule Ragex.Analyzers.Directory do
     case analyze_file(file_path) do
       {:ok, analysis} ->
         store_analysis(analysis)
-        
+
         # Generate embeddings for semantic search
-        case Ragex.Embeddings.Helper.generate_and_store_embeddings(analysis) do
+        case Helper.generate_and_store_embeddings(analysis) do
           :ok -> :ok
-          {:error, _reason} -> :ok  # Don't fail the whole analysis if embeddings fail
+          # Don't fail the whole analysis if embeddings fail
+          {:error, _reason} -> :ok
         end
-        
+
         # Track file after successful analysis
         FileTracker.track_file(file_path, analysis)
         {:ok, %{file: file_path, status: :success}}

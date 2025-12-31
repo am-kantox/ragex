@@ -7,7 +7,7 @@ defmodule Ragex.Embeddings.Persistence do
   """
 
   require Logger
-  alias Ragex.Embeddings.Registry
+  alias Ragex.Embeddings.{FileTracker, Registry}
   alias Ragex.Graph.Store
 
   @version 1
@@ -183,7 +183,7 @@ defmodule Ragex.Embeddings.Persistence do
     embeddings = get_embeddings_from_table(table)
 
     # Export file tracking data
-    file_tracking = Ragex.Embeddings.FileTracker.export()
+    file_tracking = FileTracker.export()
 
     # Build metadata
     metadata = %{
@@ -300,7 +300,7 @@ defmodule Ragex.Embeddings.Persistence do
 
     # Import file tracking data if available
     if Map.has_key?(metadata, :file_tracking) do
-      case Ragex.Embeddings.FileTracker.import(metadata.file_tracking) do
+      case FileTracker.import(metadata.file_tracking) do
         :ok ->
           Logger.debug("Loaded file tracking data")
 

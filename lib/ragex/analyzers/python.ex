@@ -228,13 +228,13 @@ defmodule Ragex.Analyzers.Python do
     calls =
       data["calls"]
       |> Enum.map(fn call ->
-        to_module = 
+        to_module =
           case call["to_module"] do
             nil -> module_name
             mod when is_binary(mod) -> String.to_atom(mod)
             _ -> module_name
           end
-        
+
         %{
           from_module: module_name,
           from_function: :unknown,

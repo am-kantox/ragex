@@ -17,6 +17,7 @@ defmodule Ragex.Embeddings.Bumblebee do
   use GenServer
   require Logger
 
+  alias Bumblebee.Text.TextEmbedding
   alias Ragex.Embeddings.Registry
 
   defmodule State do
@@ -170,7 +171,7 @@ defmodule Ragex.Embeddings.Bumblebee do
     sequence_length = min(model_info.max_tokens, 512)
 
     serving =
-      Bumblebee.Text.TextEmbedding.text_embedding(model, tokenizer,
+      TextEmbedding.text_embedding(model, tokenizer,
         output_attribute: :hidden_state,
         output_pool: :mean_pooling,
         embedding_processor: :l2_norm,

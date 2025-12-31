@@ -9,7 +9,7 @@ defmodule Ragex.MCP.SingleRequest do
       echo '{"jsonrpc":"2.0","id":1,"method":"tools/call",...}' | mix run -e 'Ragex.MCP.SingleRequest.handle()'
   """
 
-  alias Ragex.MCP.{Protocol, Handlers.Tools}
+  alias Ragex.MCP.{Handlers.Tools, Protocol}
   require Logger
 
   @doc """

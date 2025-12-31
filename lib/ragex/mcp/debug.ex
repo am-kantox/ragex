@@ -1,17 +1,17 @@
 defmodule Ragex.MCP.Debug do
   @moduledoc """
   Helper functions for debugging MCP protocol issues.
-  
+
   Usage in IEx:
-  
+
       iex> Ragex.MCP.Debug.test_initialize()
       iex> Ragex.MCP.Debug.test_tools_list()
       iex> Ragex.MCP.Debug.test_analyze()
   """
-  
-  alias Ragex.MCP.{Protocol, Handlers.Tools}
+
+  alias Ragex.MCP.{Handlers.Tools, Protocol}
   require Logger
-  
+
   @doc """
   Test the initialize handshake.
   """
@@ -28,11 +28,11 @@ defmodule Ragex.MCP.Debug do
         }
       }
     }
-    
+
     Logger.info("Testing initialize...")
     test_message(message)
   end
-  
+
   @doc """
   Test listing tools.
   """
@@ -43,11 +43,11 @@ defmodule Ragex.MCP.Debug do
       "method" => "tools/list",
       "params" => %{}
     }
-    
+
     Logger.info("Testing tools/list...")
     test_message(message)
   end
-  
+
   @doc """
   Test analyzing a directory.
   """
@@ -63,11 +63,11 @@ defmodule Ragex.MCP.Debug do
         }
       }
     }
-    
+
     Logger.info("Testing analyze_directory...")
     test_message(message)
   end
-  
+
   @doc """
   Test a raw message and show the response.
   """
@@ -75,55 +75,55 @@ defmodule Ragex.MCP.Debug do
     # Encode the message
     {:ok, json_request} = Jason.encode(message)
     Logger.debug("Request: #{json_request}")
-    
+
     # Decode it (simulating stdin)
     {:ok, decoded} = Protocol.decode(json_request)
     Logger.debug("Decoded: #{inspect(decoded)}")
-    
+
     # Process it
     response = process_message(decoded)
     Logger.debug("Response map: #{inspect(response)}")
-    
+
     # Encode response
     case Protocol.encode(response) do
       {:ok, json_response} ->
         Logger.info("✓ Response: #{json_response}")
         {:ok, Jason.decode!(json_response)}
-        
+
       {:error, reason} ->
         Logger.error("✗ Encoding failed: #{inspect(reason)}")
         {:error, reason}
     end
   end
-  
+
   @doc """
   Process a decoded message (simulating Server.handle_message).
   """
   def process_message(%{"method" => method} = message) do
     id = Map.get(message, "id")
     params = Map.get(message, "params", %{})
-    
+
     case method do
       "initialize" ->
         handle_initialize(params, id)
-        
+
       "tools/list" ->
         handle_tools_list(id)
-        
+
       "tools/call" ->
         handle_tools_call(params, id)
-        
+
       "ping" ->
         Protocol.success_response(%{}, id)
-        
+
       _ ->
         Protocol.method_not_found(method, id)
     end
   end
-  
+
   defp handle_initialize(params, id) do
     Logger.debug("Initialize params: #{inspect(params)}")
-    
+
     result = %{
       protocolVersion: "2024-11-05",
       serverInfo: %{
@@ -134,22 +134,22 @@ defmodule Ragex.MCP.Debug do
         tools: %{}
       }
     }
-    
+
     Protocol.success_response(result, id)
   end
-  
+
   defp handle_tools_list(id) do
     result = Tools.list_tools()
     Logger.debug("Tools list: #{inspect(result)}")
     Protocol.success_response(result, id)
   end
-  
+
   defp handle_tools_call(params, id) do
     tool_name = Map.get(params, "name")
     arguments = Map.get(params, "arguments", %{})
-    
+
     Logger.debug("Calling tool: #{tool_name} with #{inspect(arguments)}")
-    
+
     case Tools.call_tool(tool_name, arguments) do
       {:ok, result} ->
         # Format according to MCP spec
@@ -161,24 +161,25 @@ defmodule Ragex.MCP.Debug do
             }
           ]
         }
+
         Protocol.success_response(formatted, id)
-        
+
       {:error, reason} ->
         Logger.error("Tool error: #{inspect(reason)}")
         Protocol.internal_error(inspect(reason), id)
     end
   end
-  
+
   @doc """
   Start IEx with helpful context.
   """
   def help do
     IO.puts("""
-    
+
     === Ragex MCP Debug Helper ===
-    
+
     Available functions:
-    
+
       Ragex.MCP.Debug.test_initialize()
       - Test the MCP initialize handshake
       
@@ -190,10 +191,10 @@ defmodule Ragex.MCP.Debug do
       
       Ragex.MCP.Debug.test_message(%{...})
       - Test a raw JSON-RPC message
-    
+
     The server should be running in the background.
     Check logs with: Logger.configure(level: :debug)
-    
+
     """)
   end
 end

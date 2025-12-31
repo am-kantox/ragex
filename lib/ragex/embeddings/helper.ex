@@ -27,9 +27,11 @@ defmodule Ragex.Embeddings.Helper do
         # Generate embeddings for modules
         module_count = length(analysis_result.modules)
         function_count = length(analysis_result.functions)
-        
-        Logger.debug("Generating embeddings for #{module_count} modules and #{function_count} functions")
-        
+
+        Logger.debug(
+          "Generating embeddings for #{module_count} modules and #{function_count} functions"
+        )
+
         Enum.each(analysis_result.modules, fn module_data ->
           generate_module_embedding(module_data)
         end)
@@ -39,7 +41,10 @@ defmodule Ragex.Embeddings.Helper do
           generate_function_embedding(function_data)
         end)
 
-        Logger.info("Successfully generated embeddings for #{module_count + function_count} entities")
+        Logger.info(
+          "Successfully generated embeddings for #{module_count + function_count} entities"
+        )
+
         :ok
       rescue
         e ->

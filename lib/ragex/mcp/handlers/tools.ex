@@ -799,9 +799,9 @@ defmodule Ragex.MCP.Handlers.Tools do
     module_atom = String.to_existing_atom("Elixir." <> module)
     function_atom = String.to_atom(function)
     full_id = {:function, module_atom, function_atom, arity}
-    
+
     callers = Store.get_incoming_edges(full_id, :calls)
-    
+
     # Enrich with file/line information
     enriched_callers =
       Enum.map(callers, fn %{from: {:function, mod, func, ar}} = edge ->
@@ -819,7 +819,7 @@ defmodule Ragex.MCP.Handlers.Tools do
             })
         end
       end)
-    
+
     {:ok, %{callers: enriched_callers, count: length(enriched_callers)}}
   end
 

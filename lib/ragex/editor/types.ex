@@ -34,25 +34,50 @@ defmodule Ragex.Editor.Types do
           message: String.t(),
           severity: :error | :warning
         }
-  @doc "Creates a replace change struct.\n\n## Examples\n\n    iex> Types.replace(10, 15, \"new content\")\n    %{type: :replace, line_start: 10, line_end: 15, content: \"new content\"}\n"
+  @doc """
+  Creates a replace change struct.
+
+  ## Examples
+
+      iex> Types.replace(10, 15, "new content")
+      %{type: :replace, line_start: 10, line_end: 15, content: "new content"}
+  """
   @spec replace(pos_integer(), pos_integer(), String.t()) :: change()
   def replace(line_start, line_end, content) do
     %{type: :replace, line_start: line_start, line_end: line_end, content: content}
   end
 
-  @doc "Creates an insert change struct.\n\n## Examples\n\n    iex> Types.insert(20, \"inserted line\")\n    %{type: :insert, line_start: 20, line_end: nil, content: \"inserted line\"}\n"
+  @doc """
+  Creates an insert change struct.
+
+  ## Examples
+
+      iex> Types.insert(20, "inserted line")
+      %{type: :insert, line_start: 20, line_end: nil, content: "inserted line"}
+  """
   @spec insert(pos_integer(), String.t()) :: change()
   def insert(line_start, content) do
     %{type: :insert, line_start: line_start, line_end: nil, content: content}
   end
 
-  @doc "Creates a delete change struct.\n\n## Examples\n\n    iex> Types.delete(5, 8)\n    %{type: :delete, line_start: 5, line_end: 8, content: nil}\n"
+  @doc """
+  Creates a delete change struct.
+
+  ## Examples
+
+      iex> Types.delete(5, 8)
+      %{type: :delete, line_start: 5, line_end: 8, content: nil}
+  """
   @spec delete(pos_integer(), pos_integer()) :: change()
   def delete(line_start, line_end) do
     %{type: :delete, line_start: line_start, line_end: line_end, content: nil}
   end
 
-  @doc "Validates a change struct.\n\nReturns `:ok` if valid, `{:error, reason}` otherwise.\n"
+  @doc """
+  Validates a change struct.
+
+  Returns `:ok` if valid, `{:error, reason}` otherwise.
+  """
   @spec validate_change(change()) :: :ok | {:error, String.t()}
   def validate_change(%{type: type, line_start: line_start} = change)
       when type in [:replace, :insert, :delete] and is_integer(line_start) and line_start > 0 do
@@ -85,7 +110,9 @@ defmodule Ragex.Editor.Types do
     {:error, "Invalid change structure"}
   end
 
-  @doc "Creates an edit result struct.\n"
+  @doc """
+  Creates an edit result struct.
+  """
   @spec edit_result(String.t(), keyword()) :: edit_result()
   def edit_result(path, opts \\ []) do
     %{
@@ -98,7 +125,9 @@ defmodule Ragex.Editor.Types do
     }
   end
 
-  @doc "Creates a backup info struct.\n"
+  @doc """
+  Creates a backup info struct.
+  """
   @spec backup_info(String.t(), String.t(), String.t(), keyword()) :: backup_info()
   def backup_info(id, path, backup_path, opts \\ []) do
     %{
@@ -111,7 +140,9 @@ defmodule Ragex.Editor.Types do
     }
   end
 
-  @doc "Creates a validation error struct.\n"
+  @doc """
+  Creates a validation error struct.
+  """
   @spec validation_error(String.t(), keyword()) :: validation_error()
   def validation_error(message, opts \\ []) do
     %{

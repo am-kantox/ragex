@@ -22,34 +22,34 @@ defmodule Ragex.Graph.AlgorithmsTest do
     Store.add_node(:function, {:ModuleC, :baz, 0}, %{module: :ModuleC, name: :baz, arity: 0})
     Store.add_node(:function, {:ModuleD, :qux, 0}, %{module: :ModuleD, name: :qux, arity: 0})
 
-    # Create call relationships by adding call nodes
-    Store.add_node(:call, {:call, 1}, %{
-      caller: {:function, :ModuleA, :foo, 0},
-      callee: {:function, :ModuleB, :bar, 0},
-      file: "a.ex",
-      line: 5
-    })
+    # Create call relationships by adding edges
+    # A -> B
+    Store.add_edge(
+      {:function, :ModuleA, :foo, 0},
+      {:function, :ModuleB, :bar, 0},
+      :calls
+    )
 
-    Store.add_node(:call, {:call, 2}, %{
-      caller: {:function, :ModuleB, :bar, 0},
-      callee: {:function, :ModuleC, :baz, 0},
-      file: "b.ex",
-      line: 5
-    })
+    # B -> C
+    Store.add_edge(
+      {:function, :ModuleB, :bar, 0},
+      {:function, :ModuleC, :baz, 0},
+      :calls
+    )
 
-    Store.add_node(:call, {:call, 3}, %{
-      caller: {:function, :ModuleA, :foo, 0},
-      callee: {:function, :ModuleD, :qux, 0},
-      file: "a.ex",
-      line: 10
-    })
+    # A -> D
+    Store.add_edge(
+      {:function, :ModuleA, :foo, 0},
+      {:function, :ModuleD, :qux, 0},
+      :calls
+    )
 
-    Store.add_node(:call, {:call, 4}, %{
-      caller: {:function, :ModuleD, :qux, 0},
-      callee: {:function, :ModuleC, :baz, 0},
-      file: "d.ex",
-      line: 5
-    })
+    # D -> C
+    Store.add_edge(
+      {:function, :ModuleD, :qux, 0},
+      {:function, :ModuleC, :baz, 0},
+      :calls
+    )
 
     :ok
   end
@@ -191,49 +191,43 @@ defmodule Ragex.Graph.AlgorithmsTest do
       Store.add_node(:function, {:ModuleC, :baz, 0}, %{module: :ModuleC, name: :baz, arity: 0})
 
       # A -> B1 -> C
-      Store.add_node(:call, {:call, 1}, %{
-        caller: {:function, :ModuleA, :foo, 0},
-        callee: {:function, :ModuleB1, :bar, 0},
-        file: "a.ex",
-        line: 5
-      })
+      Store.add_edge(
+        {:function, :ModuleA, :foo, 0},
+        {:function, :ModuleB1, :bar, 0},
+        :calls
+      )
 
-      Store.add_node(:call, {:call, 2}, %{
-        caller: {:function, :ModuleB1, :bar, 0},
-        callee: {:function, :ModuleC, :baz, 0},
-        file: "b1.ex",
-        line: 5
-      })
+      Store.add_edge(
+        {:function, :ModuleB1, :bar, 0},
+        {:function, :ModuleC, :baz, 0},
+        :calls
+      )
 
       # A -> B2 -> C
-      Store.add_node(:call, {:call, 3}, %{
-        caller: {:function, :ModuleA, :foo, 0},
-        callee: {:function, :ModuleB2, :bar, 0},
-        file: "a.ex",
-        line: 6
-      })
+      Store.add_edge(
+        {:function, :ModuleA, :foo, 0},
+        {:function, :ModuleB2, :bar, 0},
+        :calls
+      )
 
-      Store.add_node(:call, {:call, 4}, %{
-        caller: {:function, :ModuleB2, :bar, 0},
-        callee: {:function, :ModuleC, :baz, 0},
-        file: "b2.ex",
-        line: 5
-      })
+      Store.add_edge(
+        {:function, :ModuleB2, :bar, 0},
+        {:function, :ModuleC, :baz, 0},
+        :calls
+      )
 
       # A -> B3 -> C
-      Store.add_node(:call, {:call, 5}, %{
-        caller: {:function, :ModuleA, :foo, 0},
-        callee: {:function, :ModuleB3, :bar, 0},
-        file: "a.ex",
-        line: 7
-      })
+      Store.add_edge(
+        {:function, :ModuleA, :foo, 0},
+        {:function, :ModuleB3, :bar, 0},
+        :calls
+      )
 
-      Store.add_node(:call, {:call, 6}, %{
-        caller: {:function, :ModuleB3, :bar, 0},
-        callee: {:function, :ModuleC, :baz, 0},
-        file: "b3.ex",
-        line: 5
-      })
+      Store.add_edge(
+        {:function, :ModuleB3, :bar, 0},
+        {:function, :ModuleC, :baz, 0},
+        :calls
+      )
 
       from = {:function, :ModuleA, :foo, 0}
       to = {:function, :ModuleC, :baz, 0}
@@ -339,7 +333,6 @@ defmodule Ragex.Graph.AlgorithmsTest do
 
       assert stats.node_counts_by_type[:module] == 4
       assert stats.node_counts_by_type[:function] == 4
-      assert stats.node_counts_by_type[:call] == 4
     end
 
     test "edge count is correct" do
@@ -400,19 +393,18 @@ defmodule Ragex.Graph.AlgorithmsTest do
         arity: 0
       })
 
-      Store.add_node(:call, {:call, 1}, %{
-        caller: {:function, :TestModule, :foo, 0},
-        callee: {:function, :TestModule, :bar, 0},
-        file: "test.ex",
-        line: 2
-      })
+      # Add edges for call relationships
+      Store.add_edge(
+        {:function, :TestModule, :foo, 0},
+        {:function, :TestModule, :bar, 0},
+        :calls
+      )
 
-      Store.add_node(:call, {:call, 2}, %{
-        caller: {:function, :TestModule, :bar, 0},
-        callee: {:function, :TestModule, :baz, 0},
-        file: "test.ex",
-        line: 3
-      })
+      Store.add_edge(
+        {:function, :TestModule, :bar, 0},
+        {:function, :TestModule, :baz, 0},
+        :calls
+      )
 
       # Test PageRank
       scores = Algorithms.pagerank()

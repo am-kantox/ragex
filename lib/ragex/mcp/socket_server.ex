@@ -11,7 +11,7 @@ defmodule Ragex.MCP.SocketServer do
   use GenServer
   require Logger
 
-  alias Ragex.MCP.{Protocol, Handlers.Tools}
+  alias Ragex.MCP.{Handlers.Tools, Protocol}
 
   @socket_path ~c"/tmp/ragex_mcp.sock"
 
@@ -197,53 +197,6 @@ defmodule Ragex.MCP.SocketServer do
     end
   end
 
-  # Keep the old handle_client logic below for reference
-  defp handle_client_old(socket) do
-    case :gen_tcp.recv(socket, 0, 30_000) do
-      {:ok, line} ->
-        line = String.trim(line)
-
-        unless line == "" do
-          case Protocol.decode(line) do
-            {:ok, message} ->
-              response = process_message(message)
-
-              case Protocol.encode(response) do
-                {:ok, json} ->
-                  :gen_tcp.send(socket, json <> "\n")
-
-                {:error, reason} ->
-                  Logger.error("Failed to encode response: #{inspect(reason)}")
-              end
-
-            {:error, reason} ->
-              Logger.error("Failed to decode message: #{inspect(reason)}")
-              error = Protocol.parse_error(nil)
-
-              case Protocol.encode(error) do
-                {:ok, json} -> :gen_tcp.send(socket, json <> "\n")
-                _ -> :ok
-              end
-          end
-        end
-
-        # Handle another request on the same connection
-        handle_client(socket)
-
-      {:error, :closed} ->
-        Logger.debug("Client disconnected")
-        :gen_tcp.close(socket)
-
-      {:error, :timeout} ->
-        Logger.debug("Client connection timeout")
-        :gen_tcp.close(socket)
-
-      {:error, reason} ->
-        Logger.error("Recv failed: #{inspect(reason)}")
-        :gen_tcp.close(socket)
-    end
-  end
-
   defp process_message(%{"method" => method} = message) do
     id = Map.get(message, "id")
     params = Map.get(message, "params", %{})
@@ -303,7 +256,7 @@ defmodule Ragex.MCP.SocketServer do
         # Convert result to JSON-safe format (handling tuples, etc.)
         json_safe_result = result_to_json(result)
         text = :json.encode(json_safe_result) |> IO.iodata_to_binary()
-        
+
         formatted = %{
           content: [
             %{
@@ -322,20 +275,20 @@ defmodule Ragex.MCP.SocketServer do
         Protocol.internal_error(inspect(reason), id)
     end
   end
-  
+
   # Convert Elixir terms to JSON-safe format
   # Tuples are converted to strings since JSON doesn't support them
   defp result_to_json(value) when is_tuple(value) do
     inspect(value)
   end
-  
+
   defp result_to_json(value) when is_list(value) do
     Enum.map(value, &result_to_json/1)
   end
-  
+
   defp result_to_json(value) when is_map(value) do
     Map.new(value, fn {k, v} -> {k, result_to_json(v)} end)
   end
-  
+
   defp result_to_json(value), do: value
 end

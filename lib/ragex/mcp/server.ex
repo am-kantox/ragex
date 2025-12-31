@@ -159,13 +159,15 @@ defmodule Ragex.MCP.Server do
         Protocol.internal_error(reason, id)
     end
   end
-  
+
   # Convert Elixir terms to JSON-safe format
   defp result_to_json(value) when is_tuple(value), do: inspect(value)
   defp result_to_json(value) when is_list(value), do: Enum.map(value, &result_to_json/1)
+
   defp result_to_json(value) when is_map(value) do
     Map.new(value, fn {k, v} -> {k, result_to_json(v)} end)
   end
+
   defp result_to_json(value), do: value
 
   defp send_response(response) do
