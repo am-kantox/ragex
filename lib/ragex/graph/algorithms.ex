@@ -360,13 +360,10 @@ defmodule Ragex.Graph.Algorithms do
   end
 
   defp get_call_edges do
-    # Get all call relationships from the graph
-    Store.list_nodes()
-    |> Enum.filter(&(&1.type == :call))
-    |> Enum.map(fn call_node ->
-      # Call nodes have caller and callee in data
-      {call_node.data.caller, call_node.data.callee}
-    end)
+    # Get all :calls edges from the edges table
+    # Edges are stored as {{from_node, to_node, edge_type}, metadata}
+    :ets.match(:ragex_edges, {{:"$1", :"$2", :calls}, :_})
+    |> Enum.map(fn [from, to] -> {from, to} end)
     |> Enum.uniq()
   end
 

@@ -50,15 +50,16 @@ defmodule Ragex.MCP.Protocol do
   """
   @spec decode(String.t()) :: {:ok, request() | notification()} | {:error, term()}
   def decode(json_string) do
-    case Jason.decode(json_string) do
-      {:ok, %{"jsonrpc" => "2.0"} = message} ->
-        {:ok, message}
-
-      {:ok, _} ->
-        {:error, :invalid_jsonrpc_version}
-
-      {:error, reason} ->
-        {:error, {:parse_error, reason}}
+    try do
+      message = :json.decode(json_string)
+      case message do
+        %{"jsonrpc" => "2.0"} ->
+          {:ok, message}
+        _ ->
+          {:error, :invalid_jsonrpc_version}
+      end
+    rescue
+      e -> {:error, {:parse_error, e}}
     end
   end
 
@@ -68,7 +69,12 @@ defmodule Ragex.MCP.Protocol do
   @spec encode(response() | error_response() | notification()) ::
           {:ok, String.t()} | {:error, term()}
   def encode(message) do
-    Jason.encode(message)
+    try do
+      json = :json.encode(message) |> IO.iodata_to_binary()
+      {:ok, json}
+    rescue
+      e -> {:error, e}
+    end
   end
 
   @doc """

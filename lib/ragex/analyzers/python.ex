@@ -136,9 +136,11 @@ defmodule Ragex.Analyzers.Python do
              stderr_to_stdout: true
            ) do
         {output, 0} ->
-          case Jason.decode(output) do
-            {:ok, data} -> {:ok, data}
-            {:error, reason} -> {:error, {:json_decode_error, reason}}
+          try do
+            data = :json.decode(output)
+            {:ok, data}
+          rescue
+            e -> {:error, {:json_decode_error, e}}
           end
 
         {error_output, _exit_code} ->
@@ -226,12 +228,18 @@ defmodule Ragex.Analyzers.Python do
     calls =
       data["calls"]
       |> Enum.map(fn call ->
+        to_module = 
+          case call["to_module"] do
+            nil -> module_name
+            mod when is_binary(mod) -> String.to_atom(mod)
+            _ -> module_name
+          end
+        
         %{
           from_module: module_name,
           from_function: :unknown,
           from_arity: 0,
-          to_module:
-            if(call["to_module"], do: String.to_atom(call["to_module"]), else: module_name),
+          to_module: to_module,
           to_function: String.to_atom(call["to_function"]),
           to_arity: 0,
           line: call["line"]

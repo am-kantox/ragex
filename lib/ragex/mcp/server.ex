@@ -150,12 +150,23 @@ defmodule Ragex.MCP.Server do
 
     case Tools.call_tool(tool_name, arguments) do
       {:ok, result} ->
-        Protocol.success_response(%{content: [%{type: "text", text: Jason.encode!(result)}]}, id)
+        # Convert result to JSON-safe format (handling tuples, etc.)
+        json_safe_result = result_to_json(result)
+        text = :json.encode(json_safe_result) |> IO.iodata_to_binary()
+        Protocol.success_response(%{content: [%{type: "text", text: text}]}, id)
 
       {:error, reason} ->
         Protocol.internal_error(reason, id)
     end
   end
+  
+  # Convert Elixir terms to JSON-safe format
+  defp result_to_json(value) when is_tuple(value), do: inspect(value)
+  defp result_to_json(value) when is_list(value), do: Enum.map(value, &result_to_json/1)
+  defp result_to_json(value) when is_map(value) do
+    Map.new(value, fn {k, v} -> {k, result_to_json(v)} end)
+  end
+  defp result_to_json(value), do: value
 
   defp send_response(response) do
     case Protocol.encode(response) do
