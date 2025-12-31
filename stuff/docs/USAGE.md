@@ -387,7 +387,15 @@ nnoremap <silent> <Plug>(ragex-callers) :call ragex#find_callers()<CR>
 
 LunarVim provides a modern NeoVim configuration with LSP, Telescope, and Lua integration, making Ragex integration even more powerful than traditional VIM.
 
-### 1. Lua-Based Integration
+### 1. Socket-Based Integration
+
+**Important**: Ragex uses a Unix socket server for better performance and stability.
+
+**Start the server:**
+```bash
+cd /path/to/ragex
+./start_mcp.sh  # Starts server on /tmp/ragex_mcp.sock
+```
 
 **Create `~/.config/lvim/lua/user/ragex.lua`:**
 
@@ -397,12 +405,25 @@ local M = {}
 -- Configuration
 M.config = {
   project_root = vim.fn.getcwd(),
-  ragex_path = "/path/to/ragex",
+  ragex_path = vim.fn.expand("~/Proyectos/Ammotion/ragex"),
   enabled = true,
+  debug = false,  -- Set to true to see request/response logs
 }
 
--- Execute Ragex MCP command
-function M.execute(method, params)
+-- Log debug messages
+local function debug_log(msg)
+  if M.config.debug then
+    vim.notify("[Ragex] " .. msg, vim.log.levels.INFO)
+  end
+end
+
+-- Execute Ragex MCP command via Unix socket
+function M.execute(method, params, callback)
+  if not M.config.enabled then
+    debug_log("Ragex is disabled")
+    return
+  end
+
   local request = vim.fn.json_encode({
     jsonrpc = "2.0",
     method = "tools/call",
@@ -413,17 +434,56 @@ function M.execute(method, params)
     id = vim.fn.rand(),
   })
 
+  debug_log("Request: " .. method)
+
+  -- Use socat to communicate with Unix socket
   local cmd = string.format(
-    "cd %s && echo '%s' | mix run --no-halt",
-    M.config.ragex_path,
-    request
+    "printf '%%s\\n' %s | socat - UNIX-CONNECT:/tmp/ragex_mcp.sock",
+    vim.fn.shellescape(request)
   )
 
-  local handle = io.popen(cmd)
-  local result = handle:read("*a")
-  handle:close()
-
-  return vim.fn.json_decode(result)
+  if callback then
+    -- Async execution
+    vim.fn.jobstart(cmd, {
+      stdout_buffered = true,
+      on_stdout = function(_, data)
+        if data and #data > 0 then
+          local result_str = table.concat(data, "\n"):gsub("^%s+", ""):gsub("%s+$", "")
+          if result_str ~= "" then
+            debug_log("Response received")
+            local ok, result = pcall(vim.fn.json_decode, result_str)
+            if ok and result then
+              callback(result)
+            else
+              vim.notify("Ragex: Invalid response format", vim.log.levels.WARN)
+            end
+          end
+        end
+      end,
+      on_exit = function(_, exit_code)
+        if exit_code ~= 0 then
+          vim.notify("Ragex: Command failed (check if server is running)", vim.log.levels.WARN)
+        end
+      end,
+    })
+  else
+    -- Synchronous execution
+    local handle = io.popen(cmd)
+    local result_str = ""
+    if handle then
+      result_str = handle:read("*a")
+      handle:close()
+    end
+    
+    if result_str and result_str ~= "" then
+      result_str = result_str:gsub("^%s+", ""):gsub("%s+$", "")
+      local ok, result = pcall(vim.fn.json_decode, result_str)
+      if ok and result then
+        return result
+      end
+    end
+    return nil
+  end
 end
 
 -- Semantic search
@@ -432,19 +492,20 @@ function M.semantic_search(query, opts)
   local params = {
     query = query,
     limit = opts.limit or 10,
-    threshold = opts.threshold or 0.7,
+    threshold = opts.threshold or 0.3,  -- Lower threshold for better recall
     node_type = opts.node_type,
   }
 
   return M.execute("semantic_search", params)
 end
 
--- Hybrid search
+-- Hybrid search (best results)
 function M.hybrid_search(query, opts)
   opts = opts or {}
   local params = {
     query = query,
     limit = opts.limit or 10,
+    threshold = 0.3,  -- Lower threshold for better recall
     strategy = opts.strategy or "fusion",
   }
 
@@ -468,34 +529,92 @@ function M.find_callers()
   })
 end
 
+-- Analyze directory
+function M.analyze_directory(path, opts)
+  opts = opts or {}
+  path = path or vim.fn.getcwd()
+  
+  local params = {
+    path = path,
+    recursive = opts.recursive ~= false,
+    parallel = opts.parallel ~= false,
+    extensions = opts.extensions or { ".ex", ".exs" },
+  }
+
+  vim.notify("Analyzing directory: " .. path, vim.log.levels.INFO)
+  
+  M.execute("analyze_directory", params, function(result)
+    if result and result.result then
+      -- Unwrap MCP response
+      local actual_result = result.result
+      if actual_result.content and actual_result.content[1] and actual_result.content[1].text then
+        local ok, parsed = pcall(vim.fn.json_decode, actual_result.content[1].text)
+        if ok then
+          actual_result = parsed
+        end
+      end
+      
+      local count = actual_result.analyzed or actual_result.success or 0
+      local total = actual_result.total or 0
+      vim.notify(string.format("Analyzed %d/%d files", count, total), vim.log.levels.INFO)
+    else
+      vim.notify("Failed to analyze directory", vim.log.levels.ERROR)
+    end
+  end)
+end
+
 -- Refactor: rename function
-function M.rename_function(new_name)
+function M.rename_function(new_name, scope)
   local module = M.get_current_module()
+  if not module then
+    vim.notify("Could not determine current module", vim.log.levels.WARN)
+    return
+  end
+
   local old_name = vim.fn.expand("<cword>")
   local arity = M.get_function_arity()
 
   local params = {
     operation = "rename_function",
-    module = module,
-    old_name = old_name,
-    new_name = new_name,
-    arity = arity,
-    scope = "project",
+    params = {  -- Nested params object for MCP
+      module = module,
+      old_name = old_name,
+      new_name = new_name,
+      arity = arity,
+    },
+    scope = scope or "project",
     validate = true,
     format = true,
   }
 
-  local result = M.execute("refactor_code", params)
+  vim.notify(
+    string.format("Renaming %s.%s/%d -> %s", module, old_name, arity, new_name),
+    vim.log.levels.INFO
+  )
 
-  -- Reload all affected buffers
-  if result.result and result.result.success then
-    vim.cmd("checktime")
-    vim.notify("Function renamed successfully", vim.log.levels.INFO)
-  else
-    vim.notify("Refactoring failed: " .. (result.error or "unknown"), vim.log.levels.ERROR)
-  end
+  M.execute("refactor_code", params, function(result)
+    if not result or not result.result then
+      vim.notify("Refactoring failed: no response", vim.log.levels.ERROR)
+      return
+    end
 
-  return result
+    -- Unwrap MCP response
+    local data = result.result
+    if data.content and data.content[1] and data.content[1].text then
+      local ok, parsed = pcall(vim.fn.json_decode, data.content[1].text)
+      if ok then
+        data = parsed
+      end
+    end
+
+    if data.success then
+      vim.cmd("checktime") -- Reload buffers
+      vim.notify("Function renamed successfully", vim.log.levels.INFO)
+    else
+      local err = data.error or result.error or "unknown error"
+      vim.notify("Refactoring failed: " .. vim.inspect(err), vim.log.levels.ERROR)
+    end
+  end)
 end
 
 -- Helper: Get current module name

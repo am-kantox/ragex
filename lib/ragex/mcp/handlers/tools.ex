@@ -799,7 +799,7 @@ defmodule Ragex.MCP.Handlers.Tools do
         {:ok, query_embedding} ->
           # Parse options
           limit = Map.get(params, "limit", 10)
-          threshold = Map.get(params, "threshold", 0.7)
+          threshold = Map.get(params, "threshold", 0.2)
 
           node_type =
             case Map.get(params, "node_type") do
@@ -871,7 +871,7 @@ defmodule Ragex.MCP.Handlers.Tools do
         end
 
       limit = Map.get(params, "limit", 10)
-      threshold = Map.get(params, "threshold", 0.7)
+      threshold = Map.get(params, "threshold", 0.2)
 
       node_type =
         case Map.get(params, "node_type") do
