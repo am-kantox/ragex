@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    name: Test (Elixir ${{ matrix.elixir }} / OTP ${{ matrix.otp }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        elixir: ['1.19']
+        otp: ['28']
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Elixir
+      uses: erlef/setup-beam@v1
+      with:
+        elixir-version: ${{ matrix.elixir }}
+        otp-version: ${{ matrix.otp }}
+
+    - name: Restore dependencies cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          deps
+          _build
+        key: ${{ runner.os }}-mix-${{ matrix.otp }}-${{ matrix.elixir }}-${{ hashFiles('**/mix.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-mix-${{ matrix.otp }}-${{ matrix.elixir }}-
+
+    - name: Install dependencies
+      run: mix deps.get
+
+    - name: Compile (check for warnings)
+      run: mix compile --warnings-as-errors
+
+    - name: Run Credo (strict mode)
+      run: mix credo --strict
+
+    - name: Run tests with coverage
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: mix coveralls.github
