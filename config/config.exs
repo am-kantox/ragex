@@ -45,7 +45,4 @@ config :ragex, :editor,
   # 10MB
   max_file_size: 10_485_760
 
-# Import environment-specific config
-if config_env() == :test do
-  import_config "test.exs"
-end
+if File.exists?("config/#{Mix.env()}.exs"), do: import_config("#{Mix.env()}.exs")

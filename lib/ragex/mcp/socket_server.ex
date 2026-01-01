@@ -32,8 +32,6 @@ defmodule Ragex.MCP.SocketServer do
     # The key is using ip: {:local, charlist_path}
     listen_opts = [
       :binary,
-      # NOTE: Removed {:packet, :line} as it was causing accept() to block forever
-      # We'll handle line delimitimg manually in recv
       {:active, false},
       {:reuseaddr, true},
       {:ip, {:local, @socket_path}}
@@ -88,7 +86,6 @@ defmodule Ragex.MCP.SocketServer do
             [:append]
           )
 
-          IO.puts(:stderr, "[DEBUG] CLIENT CONNECTED: #{inspect(client_socket)}")
           Logger.info("Client connected: #{inspect(client_socket)}")
 
           spawn(fn ->
