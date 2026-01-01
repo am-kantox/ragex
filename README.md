@@ -149,17 +149,45 @@ Ragex is an MCP (Model Context Protocol) server that analyzes codebases using co
 - ✅ **MCP integration**: `refactor_code` tool for semantic refactoring
 - ✅ **Tests**: 15 tests for AST manipulation (11 passing, 4 integration tests with known issues)
 
+### Phase 8 - Advanced Graph Algorithms ✅
+
+**Phase 8A - Centrality Metrics ✅**
+- ✅ **Betweenness Centrality**: Identify bridge/bottleneck functions using Brandes' algorithm
+- ✅ **Closeness Centrality**: Identify central functions based on average distance
+- ✅ **Normalized Scores**: Configurable 0-1 normalization
+- ✅ **Performance Limits**: max_nodes parameter for large graphs
+- ✅ **MCP Tools**: `betweenness_centrality` and `closeness_centrality`
+
+**Phase 8B - Community Detection ✅**
+- ✅ **Louvain Method**: Modularity optimization for discovering architectural modules
+- ✅ **Label Propagation**: Fast alternative algorithm (O(m) per iteration)
+- ✅ **Hierarchical Structure**: Multi-level community detection support
+- ✅ **Weighted Edges**: Support for edge weights (call frequency)
+- ✅ **MCP Tool**: `detect_communities` with algorithm selection
+
+**Phase 8C - Graph Visualization ✅**
+- ✅ **Graphviz DOT Export**: Community clustering, colored nodes, weighted edges
+- ✅ **D3.js JSON Export**: Force-directed graph format with metadata
+- ✅ **Node Coloring**: By PageRank, betweenness, or degree centrality
+- ✅ **Edge Thickness**: Proportional to edge weight
+- ✅ **MCP Tool**: `export_graph` with format selection
+
+**Phase 8D - Weighted Graph Support ✅**
+- ✅ **Edge Weights**: Store call frequency in edge metadata (default: 1.0)
+- ✅ **Weighted Algorithms**: Modularity computation with weights
+- ✅ **Store Integration**: `get_edge_weight` helper function
+
 ### Planned Features
 
-- **Phase 6**: Additional language support (Go, Rust, Java)
-- **Phase 7**: Advanced graph algorithms (betweenness centrality, community detection)
+- **Phase 6**: Production optimizations (performance tuning, caching strategies)
+- **Phase 7**: Additional language support (Go, Rust, Java)
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────┐
 │          MCP Server (stdio)             │
-│         15 MCP Tools Available          │
+│         19 MCP Tools Available          │
 └─────────────────┬───────────────────────┘
                   │
     ┌─────────────┴─────────────┬──────────┬──────────┐

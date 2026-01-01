@@ -185,12 +185,12 @@ end
 - **Phase 5C**: MCP edit tools (edit_file, validate_edit, rollback_edit, edit_history)
 - **Phase 5D**: Advanced editing (format integration, multi-file transactions)
 - **Phase 5E**: Semantic refactoring (rename_function, rename_module via AST)
+- **Phase 8**: Advanced graph algorithms (betweenness centrality, closeness centrality, community detection, visualization)
 
 ### Future Work
 
 - **Phase 6**: Production optimizations (performance tuning, caching strategies)
 - **Phase 7**: Additional language support (Go, Rust, Java)
-- **Phase 8**: Advanced graph algorithms (betweenness centrality, community detection)
 
 ## Common Tasks
 
@@ -341,6 +341,61 @@ Core.rollback("path/to/file.ex")
 - Automatic call site updates
 - Arity-aware renaming
 
+### Advanced Graph Algorithms (Phase 8)
+
+**Centrality Metrics:**
+- **Betweenness centrality**: Identify bridge/bottleneck functions
+  - Uses Brandes' algorithm (O(nm) complexity)
+  - Configurable max_nodes limit for large graphs
+  - Normalized scores (0-1 range)
+- **Closeness centrality**: Identify central functions
+  - Average distance-based metric
+  - Handles disconnected components
+
+**Community Detection:**
+- **Louvain method**: Modularity optimization
+  - Discovers architectural modules/clusters
+  - Hierarchical structure support
+  - Configurable resolution parameter
+- **Label propagation**: Fast alternative
+  - O(m) per iteration
+  - Deterministic with random seed
+  - Converges quickly (typically <10 iterations)
+
+**Weighted Edges:**
+- Edge weight support in Store (default: 1.0)
+- Call frequency tracking
+- Weighted algorithms (modularity, centrality)
+
+**Visualization Export:**
+- **Graphviz DOT format**: For visualization tools
+  - Community clustering as subgraphs
+  - Node coloring by centrality metrics
+  - Edge thickness by weight
+- **D3.js JSON format**: For web visualization
+  - Force-directed graph format
+  - Node/edge attributes with metrics
+  - Community metadata
+
+**Usage:**
+```elixir
+# Compute betweenness centrality
+scores = Algorithms.betweenness_centrality(max_nodes: 100)
+
+# Detect communities with Louvain
+communities = Algorithms.detect_communities(hierarchical: true)
+
+# Export graph visualization
+{:ok, dot} = Algorithms.export_graphviz(color_by: :betweenness)
+{:ok, json} = Algorithms.export_d3_json(include_communities: true)
+```
+
+**MCP Tools:**
+- `betweenness_centrality`: Compute betweenness scores
+- `closeness_centrality`: Compute closeness scores
+- `detect_communities`: Run community detection
+- `export_graph`: Export in Graphviz/D3 format
+
 ## Performance Considerations
 
 ### Dense Graphs
@@ -461,6 +516,6 @@ For architectural decisions or complex changes:
 
 ---
 
-**Last Updated**: December 30, 2025  
+**Last Updated**: January 1, 2026  
 **Ragex Version**: 0.2.0  
-**Status**: Production-ready (Phases 1-5 complete)
+**Status**: Production-ready (Phases 1-5, 8 complete)

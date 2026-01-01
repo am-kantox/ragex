@@ -444,6 +444,109 @@ defmodule Ragex.MCP.Handlers.Tools do
           }
         },
         %{
+          name: "betweenness_centrality",
+          description:
+            "Compute betweenness centrality to identify bridge/bottleneck functions in the call graph",
+          inputSchema: %{
+            type: "object",
+            properties: %{
+              max_nodes: %{
+                type: "integer",
+                description: "Limit computation to N highest-degree nodes",
+                default: 1000
+              },
+              normalize: %{
+                type: "boolean",
+                description: "Return normalized scores (0-1)",
+                default: true
+              }
+            }
+          }
+        },
+        %{
+          name: "closeness_centrality",
+          description:
+            "Compute closeness centrality to identify central functions in the call graph",
+          inputSchema: %{
+            type: "object",
+            properties: %{
+              normalize: %{
+                type: "boolean",
+                description: "Return normalized scores (0-1)",
+                default: true
+              }
+            }
+          }
+        },
+        %{
+          name: "detect_communities",
+          description:
+            "Detect communities/clusters in the call graph to identify architectural modules",
+          inputSchema: %{
+            type: "object",
+            properties: %{
+              algorithm: %{
+                type: "string",
+                description: "Community detection algorithm",
+                enum: ["louvain", "label_propagation"],
+                default: "louvain"
+              },
+              max_iterations: %{
+                type: "integer",
+                description: "Maximum optimization iterations",
+                default: 10
+              },
+              resolution: %{
+                type: "number",
+                description: "Resolution parameter for multi-scale detection (Louvain only)",
+                default: 1.0
+              },
+              hierarchical: %{
+                type: "boolean",
+                description: "Return hierarchical community structure (Louvain only)",
+                default: false
+              },
+              seed: %{
+                type: "integer",
+                description: "Random seed for deterministic results (label propagation only)"
+              }
+            }
+          }
+        },
+        %{
+          name: "export_graph",
+          description:
+            "Export the call graph in visualization formats (Graphviz DOT or D3.js JSON)",
+          inputSchema: %{
+            type: "object",
+            properties: %{
+              format: %{
+                type: "string",
+                description: "Export format",
+                enum: ["graphviz", "d3"],
+                default: "graphviz"
+              },
+              include_communities: %{
+                type: "boolean",
+                description: "Include community clustering",
+                default: true
+              },
+              color_by: %{
+                type: "string",
+                description: "Centrality metric for node coloring (graphviz only)",
+                enum: ["pagerank", "betweenness", "degree"],
+                default: "pagerank"
+              },
+              max_nodes: %{
+                type: "integer",
+                description: "Maximum nodes to include",
+                default: 500
+              }
+            },
+            required: ["format"]
+          }
+        },
+        %{
           name: "edit_files",
           description: "Atomically edit multiple files with automatic rollback on failure",
           inputSchema: %{
@@ -530,6 +633,7 @@ defmodule Ragex.MCP.Handlers.Tools do
   @doc """
   Executes a tool call.
   """
+  # credo:disable-for-lines:72
   def call_tool(tool_name, arguments) do
     case tool_name do
       "analyze_file" ->
@@ -585,6 +689,18 @@ defmodule Ragex.MCP.Handlers.Tools do
 
       "refactor_code" ->
         refactor_code_tool(arguments)
+
+      "betweenness_centrality" ->
+        betweenness_centrality_tool(arguments)
+
+      "closeness_centrality" ->
+        closeness_centrality_tool(arguments)
+
+      "detect_communities" ->
+        detect_communities_tool(arguments)
+
+      "export_graph" ->
+        export_graph_tool(arguments)
 
       _ ->
         {:error, "Unknown tool: #{tool_name}"}
@@ -1631,5 +1747,140 @@ defmodule Ragex.MCP.Handlers.Tools do
       end
 
     base
+  end
+
+  # New algorithm tools
+
+  defp betweenness_centrality_tool(params) do
+    max_nodes = Map.get(params, "max_nodes", 1000)
+    normalize = Map.get(params, "normalize", true)
+
+    scores = Algorithms.betweenness_centrality(max_nodes: max_nodes, normalize: normalize)
+
+    # Sort by score descending and format
+    top_nodes =
+      scores
+      |> Enum.sort_by(fn {_node, score} -> -score end)
+      # Limit output
+      |> Enum.take(100)
+      |> Enum.map(fn {node, score} ->
+        %{
+          node_id: format_node_id(node),
+          betweenness_score: Float.round(score, 6)
+        }
+      end)
+
+    {:ok,
+     %{
+       total_nodes: map_size(scores),
+       top_nodes: top_nodes
+     }}
+  end
+
+  defp closeness_centrality_tool(params) do
+    normalize = Map.get(params, "normalize", true)
+
+    scores = Algorithms.closeness_centrality(normalize: normalize)
+
+    # Sort by score descending and format
+    top_nodes =
+      scores
+      |> Enum.sort_by(fn {_node, score} -> -score end)
+      # Limit output
+      |> Enum.take(100)
+      |> Enum.map(fn {node, score} ->
+        %{
+          node_id: format_node_id(node),
+          closeness_score: Float.round(score, 6)
+        }
+      end)
+
+    {:ok,
+     %{
+       total_nodes: map_size(scores),
+       top_nodes: top_nodes
+     }}
+  end
+
+  defp detect_communities_tool(params) do
+    algorithm = Map.get(params, "algorithm", "louvain")
+    max_iterations = Map.get(params, "max_iterations", 10)
+    resolution = Map.get(params, "resolution", 1.0)
+    hierarchical = Map.get(params, "hierarchical", false)
+    seed = Map.get(params, "seed")
+
+    result =
+      case algorithm do
+        "louvain" ->
+          Algorithms.detect_communities(
+            max_iterations: max_iterations,
+            resolution: resolution,
+            hierarchical: hierarchical
+          )
+
+        "label_propagation" ->
+          opts = [max_iterations: max_iterations]
+          opts = if seed, do: Keyword.put(opts, :seed, seed), else: opts
+          Algorithms.detect_communities_lp(opts)
+
+        _ ->
+          Algorithms.detect_communities(max_iterations: max_iterations)
+      end
+
+    # Format communities
+    formatted =
+      if is_map(result) and Map.has_key?(result, :communities) do
+        # Hierarchical result
+        %{
+          communities: format_communities(result.communities),
+          hierarchy: result.hierarchy,
+          modularity_per_level: result.modularity_per_level
+        }
+      else
+        # Simple result
+        format_communities(result)
+      end
+
+    {:ok, formatted}
+  end
+
+  defp format_communities(communities) when is_map(communities) do
+    communities
+    |> Enum.map(fn {comm_id, nodes} ->
+      %{
+        community_id: inspect(comm_id),
+        size: length(nodes),
+        members: Enum.map(nodes, &format_node_id/1)
+      }
+    end)
+  end
+
+  defp export_graph_tool(params) do
+    format = Map.get(params, "format", "graphviz")
+    include_communities = Map.get(params, "include_communities", true)
+    color_by = String.to_atom(Map.get(params, "color_by", "pagerank"))
+    max_nodes = Map.get(params, "max_nodes", 500)
+
+    case format do
+      "graphviz" ->
+        opts = [
+          include_communities: include_communities,
+          color_by: color_by,
+          max_nodes: max_nodes
+        ]
+
+        Algorithms.export_graphviz(opts)
+
+      "d3" ->
+        opts = [
+          include_communities: include_communities,
+          max_nodes: max_nodes
+        ]
+
+        Algorithms.export_d3_json(opts)
+
+      _ ->
+        {:error, "Unknown format: #{format}"}
+    end
   end
 end

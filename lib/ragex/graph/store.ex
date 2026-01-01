@@ -84,9 +84,13 @@ defmodule Ragex.Graph.Store do
   Adds an edge between two nodes.
 
   Edge types: :calls, :imports, :defines, :inherits, :implements
+
+  ## Options
+  - `:weight` - Edge weight (default: 1.0) for weighted graph algorithms
+  - `:metadata` - Additional metadata map
   """
-  def add_edge(from_node, to_node, edge_type) do
-    GenServer.call(__MODULE__, {:add_edge, from_node, to_node, edge_type})
+  def add_edge(from_node, to_node, edge_type, opts \\ []) do
+    GenServer.call(__MODULE__, {:add_edge, from_node, to_node, edge_type, opts})
   end
 
   @doc """
@@ -111,6 +115,18 @@ defmodule Ragex.Graph.Store do
     |> Enum.map(fn [from_node, metadata] ->
       %{from: from_node, type: edge_type, metadata: metadata}
     end)
+  end
+
+  @doc """
+  Gets the weight of an edge between two nodes.
+
+  Returns the weight (default: 1.0) if edge exists, nil otherwise.
+  """
+  def get_edge_weight(from_node, to_node, edge_type) do
+    case :ets.lookup(@edges_table, {from_node, to_node, edge_type}) do
+      [{_key, metadata}] -> Map.get(metadata, :weight, 1.0)
+      [] -> nil
+    end
   end
 
   @doc """
@@ -215,9 +231,12 @@ defmodule Ragex.Graph.Store do
   end
 
   @impl true
-  def handle_call({:add_edge, from_node, to_node, edge_type}, _from, state) do
+  def handle_call({:add_edge, from_node, to_node, edge_type, opts}, _from, state) do
     key = {from_node, to_node, edge_type}
-    :ets.insert(@edges_table, {key, %{}})
+    weight = Keyword.get(opts, :weight, 1.0)
+    metadata = Keyword.get(opts, :metadata, %{})
+    metadata_with_weight = Map.put(metadata, :weight, weight)
+    :ets.insert(@edges_table, {key, metadata_with_weight})
     {:reply, :ok, state}
   end
 
