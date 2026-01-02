@@ -9,12 +9,12 @@ Ragex is an MCP (Model Context Protocol) server that analyzes codebases using co
 <details>
   <summary>Foundation</summary>
 
-  ▸ MCP Server Protocol: Full JSON-RPC 2.0 implementation over both stdio and socket
-  ▸ Elixir Code Analyzer: AST-based parser extracting modules, functions, calls, and dependencies
-  ▸ Knowledge Graph: ETS-based storage for code entities and relationships
-  ▸ MCP Tools:
-    ▹ `analyze_file`: Parse and index source files
-    ▹ `query_graph`: Search for modules, functions, and relationships
+  ▸ MCP Server Protocol: Full JSON-RPC 2.0 implementation over both stdio and socket  
+  ▸ Elixir Code Analyzer: AST-based parser extracting modules, functions, calls, and dependencies  
+  ▸ Knowledge Graph: ETS-based storage for code entities and relationships  
+  ▸ MCP Tools:  
+    ▹ `analyze_file`: Parse and index source files  
+    ▹ `query_graph`: Search for modules, functions, and relationships  
     ▹ `list_nodes`: Browse indexed code entities
 </details>
 <details>
@@ -177,23 +177,28 @@ Ragex is an MCP (Model Context Protocol) server that analyzes codebases using co
 
 ## Architecture
 
-```
-        ┌─────────────────────────────────────────┐
-        │          MCP Server (stdio)             │
-        │         19 MCP Tools Available          │
-        └─────────────────┬───────────────────────┘
-                          │
-    ┌────────────┬────────┴─────┬──────────┬──────────┐
-    │            │              │          │          │
-┌───┸───┐   ┌────┸────┐   ┌─────┸───┐ ┌────┸───┐ ┌────┸─────┐
-│ Tools │   │Analyzers│   │  Graph  │ │ Vector │ │Bumblebee │
-│Handler│◄─►│(4 langs)│◄─►│  Store  │ │ Store  │ │Embedding │
-└───┬───┘   └─────────┘   └────┬────┘ └────┬───┘ └──────────┘
-    │                          │           │
-    │       ┌──────────────────┴───────────┴─────┐
-    └──────►│      Hybrid Retrieval (RRF)        │
-            │     Semantic + Graph + Fusion      │
-            └────────────────────────────────────┘
+```mermaid
+graph TD
+    MCP["MCP Server (stdio)<br/>19 MCP Tools Available"]
+    
+    MCP --> Tools["Tools Handler"]
+    MCP --> Analyzers["Analyzers<br/>(Elixir, Erlang, Python, JS/TS)"]
+    MCP --> Graph["Graph Store<br/>(ETS Knowledge Graph)"]
+    MCP --> Vector["Vector Store<br/>(Cosine Similarity)"]
+    MCP --> Bumblebee["Bumblebee Embedding<br/>(all-MiniLM-L6-v2)"]
+    
+    Tools <--> Analyzers
+    Analyzers <--> Graph
+    
+    Tools --> Hybrid["Hybrid Retrieval (RRF)<br/>Semantic + Graph + Fusion"]
+    Graph --> Hybrid
+    Vector --> Hybrid
+    
+    style MCP fill:#e1f5ff,stroke:#01579b,stroke-width:2px
+    style Hybrid fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    style Graph fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
+    style Vector fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    style Bumblebee fill:#fce4ec,stroke:#880e4f,stroke-width:2px
 ```
 
 ## Installation
