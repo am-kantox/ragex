@@ -45,4 +45,20 @@ config :ragex, :editor,
   # 10MB
   max_file_size: 10_485_760
 
+# Graph Algorithms Configuration (Phase 8)
+config :ragex, :graph,
+  # Maximum nodes to compute for betweenness centrality
+  max_nodes_betweenness: 1_000,
+  # Maximum nodes to export in visualization formats
+  max_nodes_export: 500
+
+# Semantic Search Configuration
+config :ragex, :search,
+  # Default similarity threshold (0.0-1.0)
+  # Lower values = more results but lower quality
+  # Typical useful range: 0.1-0.3 for all-MiniLM-L6-v2
+  default_threshold: 0.2,
+  # Lower threshold for hybrid search (more recall)
+  hybrid_threshold: 0.15
+
 if File.exists?("config/#{Mix.env()}.exs"), do: import_config("#{Mix.env()}.exs")

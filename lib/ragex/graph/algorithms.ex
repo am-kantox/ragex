@@ -168,7 +168,7 @@ defmodule Ragex.Graph.Algorithms do
   Uses Brandes' algorithm (O(nm) complexity).
 
   ## Parameters
-  - `:max_nodes` - Limit computation to N highest-degree nodes (default: 1000)
+  - `:max_nodes` - Limit computation to N highest-degree nodes (default: from config, 1000)
   - `:normalize` - Return normalized scores 0-1 (default: true)
   - `:directed` - Treat graph as directed (default: true)
 
@@ -177,7 +177,7 @@ defmodule Ragex.Graph.Algorithms do
 
   ## Examples
 
-      # Compute for all nodes (up to 1000)
+      # Compute for all nodes (up to configured max)
       betweenness_centrality()
 
       # Compute for top 100 nodes by degree
@@ -187,7 +187,10 @@ defmodule Ragex.Graph.Algorithms do
       betweenness_centrality(normalize: false)
   """
   def betweenness_centrality(opts \\ []) do
-    max_nodes = Keyword.get(opts, :max_nodes, 1000)
+    default_max =
+      Application.get_env(:ragex, :graph, []) |> Keyword.get(:max_nodes_betweenness, 1_000)
+
+    max_nodes = Keyword.get(opts, :max_nodes, default_max)
     normalize = Keyword.get(opts, :normalize, true)
 
     edges = get_call_edges()
@@ -449,7 +452,7 @@ defmodule Ragex.Graph.Algorithms do
   ## Parameters
   - `:include_communities` - Include community clustering (default: true)
   - `:color_by` - Centrality metric for node coloring: :pagerank, :betweenness, :degree (default: :pagerank)
-  - `:max_nodes` - Maximum nodes to include (default: 500)
+  - `:max_nodes` - Maximum nodes to include (default: from config, 500)
 
   ## Returns
   `{:ok, dot_string}` or `{:error, reason}`
@@ -465,7 +468,8 @@ defmodule Ragex.Graph.Algorithms do
   def export_graphviz(opts \\ []) do
     include_communities = Keyword.get(opts, :include_communities, true)
     color_by = Keyword.get(opts, :color_by, :pagerank)
-    max_nodes = Keyword.get(opts, :max_nodes, 500)
+    default_max = Application.get_env(:ragex, :graph, []) |> Keyword.get(:max_nodes_export, 500)
+    max_nodes = Keyword.get(opts, :max_nodes, default_max)
 
     edges = get_call_edges()
 
@@ -512,7 +516,7 @@ defmodule Ragex.Graph.Algorithms do
 
   ## Parameters
   - `:include_communities` - Include community metadata (default: true)
-  - `:max_nodes` - Maximum nodes to include (default: 500)
+  - `:max_nodes` - Maximum nodes to include (default: from config, 500)
 
   ## Returns
   `{:ok, json_map}` or `{:error, reason}`
@@ -525,7 +529,8 @@ defmodule Ragex.Graph.Algorithms do
   """
   def export_d3_json(opts \\ []) do
     include_communities = Keyword.get(opts, :include_communities, true)
-    max_nodes = Keyword.get(opts, :max_nodes, 500)
+    default_max = Application.get_env(:ragex, :graph, []) |> Keyword.get(:max_nodes_export, 500)
+    max_nodes = Keyword.get(opts, :max_nodes, default_max)
 
     edges = get_call_edges()
 

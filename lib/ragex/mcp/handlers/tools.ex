@@ -164,8 +164,8 @@ defmodule Ragex.MCP.Handlers.Tools do
               },
               threshold: %{
                 type: "number",
-                description: "Minimum similarity score (0.0 to 1.0)",
-                default: 0.7
+                description: "Minimum similarity score (0.0 to 1.0, typical: 0.1-0.3)",
+                default: 0.2
               },
               node_type: %{
                 type: "string",
@@ -245,8 +245,8 @@ defmodule Ragex.MCP.Handlers.Tools do
               },
               threshold: %{
                 type: "number",
-                description: "Minimum similarity score (0.0 to 1.0)",
-                default: 0.7
+                description: "Minimum similarity score (0.0 to 1.0, typical: 0.1-0.3)",
+                default: 0.15
               },
               node_type: %{
                 type: "string",
@@ -973,7 +973,11 @@ defmodule Ragex.MCP.Handlers.Tools do
         {:ok, query_embedding} ->
           # Parse options
           limit = Map.get(params, "limit", 10)
-          threshold = Map.get(params, "threshold", 0.2)
+
+          default_threshold =
+            Application.get_env(:ragex, :search, []) |> Keyword.get(:default_threshold, 0.2)
+
+          threshold = Map.get(params, "threshold", default_threshold)
 
           node_type =
             case Map.get(params, "node_type") do
@@ -1045,7 +1049,11 @@ defmodule Ragex.MCP.Handlers.Tools do
         end
 
       limit = Map.get(params, "limit", 10)
-      threshold = Map.get(params, "threshold", 0.2)
+
+      default_threshold =
+        Application.get_env(:ragex, :search, []) |> Keyword.get(:hybrid_threshold, 0.15)
+
+      threshold = Map.get(params, "threshold", default_threshold)
 
       node_type =
         case Map.get(params, "node_type") do

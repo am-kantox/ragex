@@ -132,7 +132,7 @@ function M.semantic_search(query, opts)
   local params = {
     query = query,
     limit = opts.limit or 10,
-    threshold = opts.threshold or 0.3,  -- Lower threshold for better recall
+    threshold = opts.threshold or 0.2,  -- Default threshold (0.1-0.3 typical range)
     node_type = opts.node_type,
   }
 
@@ -145,7 +145,7 @@ function M.hybrid_search(query, opts)
   local params = {
     query = query,
     limit = opts.limit or 10,
-    threshold = 0.3,  -- Lower threshold for better recall
+    threshold = opts.threshold or 0.15,  -- Lower threshold for better recall
     strategy = opts.strategy or "fusion",
   }
 
