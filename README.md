@@ -354,6 +354,8 @@ end
 
 This should result in the following `<leader>r` update:
 
+<img width="1411" height="388" alt="Captura de pantalla_20260102_100918" src="https://github.com/user-attachments/assets/af24d31f-c835-4dc5-a04b-2e43e63dbc11" />
+
 ## Installation
 
 ### Prerequisites
@@ -361,7 +363,7 @@ This should result in the following `<leader>r` update:
 - Elixir 1.19 or later
 - Erlang/OTP 28 or later
 - Python 3.x (optional, for Python code analysis)
-- NPM (optional, for Javascript code analysis)
+- Node.JS (optional, for Javascript code analysis)
 - ~500MB RAM for embedding model (first run downloads ~90MB)
 
 ### Build
