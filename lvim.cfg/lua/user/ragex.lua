@@ -22,11 +22,15 @@ local function debug_log(msg)
 end
 
 -- Execute Ragex MCP command
-function M.execute(method, params, callback)
+function M.execute(method, params, callback, timeout_ms)
   if not M.config.enabled then
     debug_log("Ragex is disabled")
     return
   end
+
+  -- Default timeout: 60 seconds for most operations, 120 seconds for analyze_directory
+  local default_timeout = method == "analyze_directory" and 120000 or 60000
+  timeout_ms = timeout_ms or default_timeout
 
   local request = vim.fn.json_encode({
     jsonrpc = "2.0",
@@ -40,40 +44,47 @@ function M.execute(method, params, callback)
 
   debug_log("Request JSON: " .. request)
 
-  -- Connect to persistent socket server  
-  -- Use socat in bidirectional mode with proper handling:
-  -- The key issue is that socat needs to:
-  -- 1. Send the request
-  -- 2. Close the write side (so server knows request is complete)
-  -- 3. But keep read side open to receive response
-  -- 4. Wait for server to send response and close
-  -- Using printf with proper quoting
+  -- Connect to persistent socket server
+  -- Note: We rely on Lua timer for timeout, not shell timeout command
   local cmd = string.format(
     "printf '%%s\\n' %s | socat - UNIX-CONNECT:/tmp/ragex_mcp.sock",
     vim.fn.shellescape(request)
   )
 
-  debug_log("Executing: " .. method)
+  debug_log("Executing: " .. method .. " (timeout: " .. math.ceil(timeout_ms / 1000) .. "s)")
   debug_log("Command: " .. cmd)
 
   if callback then
-    -- Async execution
-    vim.fn.jobstart(cmd, {
+    -- Async execution with timeout handling
+    local timer = nil
+    local job_id = nil
+    local completed = false
+    local response_received = false
+
+    job_id = vim.fn.jobstart(cmd, {
       stdout_buffered = true,
       on_stdout = function(_, data)
+        if completed then return end
+        
         if data and #data > 0 then
           local result_str = table.concat(data, "\n")
           -- Clean up any trailing newlines or empty strings
           result_str = result_str:gsub("^%s+", ""):gsub("%s+$", "")
           
           if result_str ~= "" then
+            response_received = true
+            completed = true
+            if timer then
+              vim.fn.timer_stop(timer)
+            end
+            
             debug_log("Response: " .. result_str:sub(1, 200))
             local ok, result = pcall(vim.fn.json_decode, result_str)
             if ok and result then
-              callback(result)
+              callback(result, nil)  -- Success: result with no error
             else
               debug_log("JSON parse error for: " .. result_str:sub(1, 100))
-              vim.notify("Ragex: Invalid response format", vim.log.levels.WARN)
+              callback(nil, "parse_error")
             end
           end
         end
@@ -87,12 +98,31 @@ function M.execute(method, params, callback)
         end
       end,
       on_exit = function(_, exit_code)
-        if exit_code ~= 0 then
+        if completed then return end
+        
+        completed = true
+        if timer then
+          vim.fn.timer_stop(timer)
+        end
+        
+        if exit_code ~= 0 and not response_received then
           debug_log("Command exited with code: " .. exit_code)
-          vim.notify("Ragex: Command failed (check if server is running)", vim.log.levels.WARN)
+          callback(nil, "error")
         end
       end,
     })
+    
+    -- Fallback timer in case jobstart doesn't report timeout
+    timer = vim.fn.timer_start(timeout_ms, function()
+      if not completed then
+        completed = true
+        debug_log("Timer timeout triggered for " .. method)
+        if job_id then
+          vim.fn.jobstop(job_id)
+        end
+        callback(nil, "timeout")
+      end
+    end)
   else
     -- Synchronous execution  
     debug_log("Command: " .. cmd)
@@ -160,7 +190,12 @@ function M.analyze_current_file()
     return
   end
 
-  M.execute("analyze_file", { path = filepath }, function(result)
+  M.execute("analyze_file", { path = filepath }, function(result, error_type)
+    if error_type then
+      vim.notify("Failed to analyze file: " .. error_type, vim.log.levels.ERROR)
+      return
+    end
+    
     if result and result.result then
       vim.notify("File analyzed successfully", vim.log.levels.INFO)
     else
@@ -186,8 +221,24 @@ function M.analyze_directory(path, opts)
     vim.notify("Analyzing directory: " .. path .. "...", vim.log.levels.INFO)
   end
   
-  M.execute("analyze_directory", params, function(result)
+  M.execute("analyze_directory", params, function(result, error_type)
     debug_log("analyze_directory result: " .. vim.inspect(result))
+    
+    -- Handle timeout error
+    if error_type == "timeout" then
+      if not opts.silent then
+        vim.notify(string.format("✗ Ragex: Timed out analyzing %s (try again, embeddings will cache)", vim.fn.fnamemodify(path, ":~")), vim.log.levels.WARN)
+      end
+      return
+    end
+    
+    -- Handle other errors
+    if error_type == "error" or error_type == "parse_error" then
+      if not opts.silent then
+        vim.notify("✗ Ragex: Failed to analyze directory", vim.log.levels.ERROR)
+      end
+      return
+    end
     
     if result and result.result then
       -- The MCP response wraps the actual result in result.content[1].text (JSON string)

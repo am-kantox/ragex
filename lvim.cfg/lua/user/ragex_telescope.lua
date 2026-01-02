@@ -24,10 +24,22 @@ function M.ragex_search()
       hide_from_history = true,
     })
 
-    ragex.execute("hybrid_search", { query = query, limit = 50 }, function(result)
+    ragex.execute("hybrid_search", { query = query, limit = 50 }, function(result, error_type)
       -- Dismiss loading notification
       if loading then
         vim.notify("", vim.log.levels.INFO, { replace = loading, timeout = 1 })
+      end
+
+      -- Handle timeout
+      if error_type == "timeout" then
+        vim.notify("✗ Ragex: Search timed out (try again, embeddings will cache)", vim.log.levels.WARN)
+        return
+      end
+
+      -- Handle other errors
+      if error_type == "error" or error_type == "parse_error" then
+        vim.notify("✗ Ragex: Search failed", vim.log.levels.ERROR)
+        return
       end
 
       if not result or not result.result then
@@ -108,7 +120,19 @@ function M.ragex_functions()
       query = query,
       limit = 50,
       node_type = "function",
-    }, function(result)
+    }, function(result, error_type)
+      -- Handle timeout
+      if error_type == "timeout" then
+        vim.notify("✗ Ragex: Search timed out (try again, embeddings will cache)", vim.log.levels.WARN)
+        return
+      end
+
+      -- Handle other errors
+      if error_type == "error" or error_type == "parse_error" then
+        vim.notify("✗ Ragex: Search failed", vim.log.levels.ERROR)
+        return
+      end
+
       if not result or not result.result then
         vim.notify("No functions found", vim.log.levels.WARN)
         return
@@ -189,7 +213,19 @@ function M.ragex_modules()
       query = query,
       limit = 50,
       node_type = "module",
-    }, function(result)
+    }, function(result, error_type)
+      -- Handle timeout
+      if error_type == "timeout" then
+        vim.notify("✗ Ragex: Search timed out (try again, embeddings will cache)", vim.log.levels.WARN)
+        return
+      end
+
+      -- Handle other errors
+      if error_type == "error" or error_type == "parse_error" then
+        vim.notify("✗ Ragex: Search failed", vim.log.levels.ERROR)
+        return
+      end
+
       if not result or not result.result then
         vim.notify("No modules found", vim.log.levels.WARN)
         return
@@ -266,7 +302,19 @@ function M.ragex_search_word()
 
   local ragex = require("user.ragex")
   
-  ragex.execute("hybrid_search", { query = word, limit = 50 }, function(result)
+  ragex.execute("hybrid_search", { query = word, limit = 50 }, function(result, error_type)
+    -- Handle timeout
+    if error_type == "timeout" then
+      vim.notify("✗ Ragex: Search timed out for '" .. word .. "' (try again, embeddings will cache)", vim.log.levels.WARN)
+      return
+    end
+
+    -- Handle other errors
+    if error_type == "error" or error_type == "parse_error" then
+      vim.notify("✗ Ragex: Search failed for '" .. word .. "'", vim.log.levels.ERROR)
+      return
+    end
+
     if not result or not result.result then
       vim.notify("No results found for: " .. word, vim.log.levels.WARN)
       return
