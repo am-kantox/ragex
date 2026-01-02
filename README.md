@@ -1,4 +1,4 @@
-# Ragex
+# <img width="144" height="144" alt="logo-notext-144x144-transparent" src="https://github.com/user-attachments/assets/9787c8a8-c0bf-46c0-94cb-cceda2c1ec11" /> Ragex
 
 **Hybrid Retrieval-Augmented Generation for Multi-Language Codebases**
 
