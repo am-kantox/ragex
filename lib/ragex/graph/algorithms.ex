@@ -600,7 +600,7 @@ defmodule Ragex.Graph.Algorithms do
   - Top nodes by PageRank
   """
   def graph_stats do
-    nodes = Store.list_nodes()
+    nodes = Store.list_nodes(nil, :infinity)
     edges = get_call_edges()
 
     node_counts =

@@ -48,9 +48,9 @@ config :ragex, :editor,
 # Graph Algorithms Configuration (Phase 8)
 config :ragex, :graph,
   # Maximum nodes to compute for betweenness centrality
-  max_nodes_betweenness: 1_000,
+  max_nodes_betweenness: 10_000,
   # Maximum nodes to export in visualization formats
-  max_nodes_export: 500
+  max_nodes_export: 10_000
 
 # Semantic Search Configuration
 config :ragex, :search,

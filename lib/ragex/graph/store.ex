@@ -62,9 +62,15 @@ defmodule Ragex.Graph.Store do
         type -> {{type, :"$1"}, :"$2"}
       end
 
-    :ets.match(@nodes_table, pattern)
-    |> Enum.take(limit)
-    |> Enum.map(fn
+    matches = :ets.match(@nodes_table, pattern)
+
+    matches =
+      case limit do
+        :infinity -> matches
+        n when is_integer(n) -> Enum.take(matches, n)
+      end
+
+    Enum.map(matches, fn
       [node_type, node_id, data] -> %{type: node_type, id: node_id, data: data}
       [node_id, data] -> %{type: node_type, id: node_id, data: data}
     end)

@@ -67,7 +67,12 @@ defmodule Ragex.Analyzers.Directory do
 
     results =
       files_to_analyze
-      |> Task.async_stream(&analyze_and_store_file/1, max_concurrency: System.schedulers_online())
+      |> Task.async_stream(&analyze_and_store_file/1,
+        max_concurrency: System.schedulers_online(),
+        # 30 seconds per file
+        timeout: 30_000,
+        on_timeout: :kill_task
+      )
       |> Enum.to_list()
       |> Enum.map(fn
         {:ok, result} -> result
