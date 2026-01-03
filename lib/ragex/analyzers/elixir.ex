@@ -21,7 +21,10 @@ defmodule Ragex.Analyzers.Elixir do
           calls: [],
           imports: [],
           # Track aliases for resolution
-          aliases: %{}
+          aliases: %{},
+          # Track pending documentation
+          pending_moduledoc: nil,
+          pending_doc: nil
         }
 
         context = traverse_ast(ast, context)
@@ -49,6 +52,7 @@ defmodule Ragex.Analyzers.Elixir do
     module_name = extract_module_name(module_alias)
     line = Keyword.get(meta, :line, 0)
 
+    # Create placeholder module info (will be updated with doc later)
     module_info = %{
       name: module_name,
       file: context.file,
@@ -60,11 +64,30 @@ defmodule Ragex.Analyzers.Elixir do
     context = %{context | current_module: module_name}
     context = %{context | modules: [module_info | context.modules]}
 
-    # Traverse module body
+    # Traverse module body - this will encounter @moduledoc
     context = traverse_ast(body, context)
 
-    # Clear aliases when leaving module
-    %{context | current_module: nil, aliases: %{}}
+    # Update module with captured moduledoc
+    context =
+      if context.pending_moduledoc do
+        # Find and update the module we just added
+        updated_modules =
+          context.modules
+          |> Enum.map(fn mod ->
+            if mod.name == module_name && mod.line == line do
+              %{mod | doc: context.pending_moduledoc}
+            else
+              mod
+            end
+          end)
+
+        %{context | modules: updated_modules, pending_moduledoc: nil}
+      else
+        context
+      end
+
+    # Clear aliases and pending docs when leaving module
+    %{context | current_module: nil, aliases: %{}, pending_moduledoc: nil, pending_doc: nil}
   end
 
   defp traverse_ast({:def, meta, [signature | _]} = node, context) do
@@ -75,9 +98,18 @@ defmodule Ragex.Analyzers.Elixir do
     handle_function_def(node, meta, signature, :private, context)
   end
 
-  defp traverse_ast({:@, _meta, [{:doc, _, [doc]}]}, context) when is_binary(doc) do
-    # Store doc for next function/module (simplified for now)
-    context
+  defp traverse_ast({:@, _meta, [{:moduledoc, _, [doc]}]}, context) do
+    # Store moduledoc for next module definition
+    # Handle both binary strings and false (for @moduledoc false)
+    doc_value = if is_binary(doc), do: doc, else: nil
+    %{context | pending_moduledoc: doc_value}
+  end
+
+  defp traverse_ast({:@, _meta, [{:doc, _, [doc]}]}, context) do
+    # Store doc for next function definition
+    # Handle both binary strings and false (for @doc false)
+    doc_value = if is_binary(doc), do: doc, else: nil
+    %{context | pending_doc: doc_value}
   end
 
   defp traverse_ast({:import, _meta, [module_alias | _]}, context) do
@@ -172,19 +204,24 @@ defmodule Ragex.Analyzers.Elixir do
     line = Keyword.get(meta, :line, 0)
 
     if context.current_module do
+      # Attach pending doc if available
+      doc = context.pending_doc
+
       func_info = %{
         name: name,
         arity: arity,
         module: context.current_module,
         file: context.file,
         line: line,
-        doc: nil,
+        doc: doc,
         visibility: visibility,
         metadata: %{}
       }
 
       context = %{context | functions: [func_info | context.functions]}
       context = %{context | current_function: {name, arity}}
+      # Clear pending doc after use
+      context = %{context | pending_doc: nil}
 
       # Traverse function body (not the entire def node to avoid infinite recursion)
       body =
