@@ -10,6 +10,9 @@ defmodule Ragex.Analyzers.Elixir do
 
   @impl true
   def analyze(source, file_path) do
+    # Extract comments from source
+    comments = extract_comments(source)
+
     case Code.string_to_quoted(source, file: file_path, columns: true) do
       {:ok, ast} ->
         context = %{
@@ -18,20 +21,32 @@ defmodule Ragex.Analyzers.Elixir do
           current_function: nil,
           modules: [],
           functions: [],
+          types: [],
           calls: [],
           imports: [],
           # Track aliases for resolution
           aliases: %{},
           # Track pending documentation
           pending_moduledoc: nil,
-          pending_doc: nil
+          pending_doc: nil,
+          pending_typedoc: nil,
+          pending_spec: nil,
+          # Store comments for association
+          comments: comments
         }
 
         context = traverse_ast(ast, context)
 
+        # Associate comments with undocumented entities
+        context = associate_comments(context)
+
+        # Extract documentation references and links
+        context = extract_doc_references(context)
+
         result = %{
           modules: Enum.reverse(context.modules),
           functions: Enum.reverse(context.functions),
+          types: Enum.reverse(context.types),
           calls: Enum.reverse(context.calls),
           imports: Enum.reverse(context.imports)
         }
@@ -87,7 +102,15 @@ defmodule Ragex.Analyzers.Elixir do
       end
 
     # Clear aliases and pending docs when leaving module
-    %{context | current_module: nil, aliases: %{}, pending_moduledoc: nil, pending_doc: nil}
+    %{
+      context
+      | current_module: nil,
+        aliases: %{},
+        pending_moduledoc: nil,
+        pending_doc: nil,
+        pending_typedoc: nil,
+        pending_spec: nil
+    }
   end
 
   defp traverse_ast({:def, meta, [signature | _]} = node, context) do
@@ -110,6 +133,47 @@ defmodule Ragex.Analyzers.Elixir do
     # Handle both binary strings and false (for @doc false)
     doc_value = if is_binary(doc), do: doc, else: nil
     %{context | pending_doc: doc_value}
+  end
+
+  defp traverse_ast({:@, _meta, [{:typedoc, _, [doc]}]}, context) do
+    # Store typedoc for next type definition
+    doc_value = if is_binary(doc), do: doc, else: nil
+    %{context | pending_typedoc: doc_value}
+  end
+
+  defp traverse_ast({:@, _meta, [{:spec, _, spec_args}]}, context) do
+    # Store spec for next function definition
+    # Format: @spec func_name(type1, type2) :: return_type
+    spec_string = format_spec(spec_args)
+    %{context | pending_spec: spec_string}
+  end
+
+  # Handle @type, @typep, @opaque
+  defp traverse_ast({:@, meta, [{type_kind, _, [type_def]}]}, context)
+       when type_kind in [:type, :typep, :opaque] do
+    if context.current_module do
+      {type_name, type_spec} = extract_type_info(type_def)
+      line = Keyword.get(meta, :line, 0)
+      visibility = if type_kind == :typep, do: :private, else: :public
+
+      type_info = %{
+        name: type_name,
+        module: context.current_module,
+        file: context.file,
+        line: line,
+        kind: type_kind,
+        spec: type_spec,
+        doc: context.pending_typedoc,
+        visibility: visibility,
+        metadata: %{}
+      }
+
+      context = %{context | types: [type_info | context.types]}
+      # Clear pending typedoc after use
+      %{context | pending_typedoc: nil}
+    else
+      context
+    end
   end
 
   defp traverse_ast({:import, _meta, [module_alias | _]}, context) do
@@ -204,8 +268,9 @@ defmodule Ragex.Analyzers.Elixir do
     line = Keyword.get(meta, :line, 0)
 
     if context.current_module do
-      # Attach pending doc if available
+      # Attach pending doc and spec if available
       doc = context.pending_doc
+      spec = context.pending_spec
 
       func_info = %{
         name: name,
@@ -214,14 +279,15 @@ defmodule Ragex.Analyzers.Elixir do
         file: context.file,
         line: line,
         doc: doc,
+        spec: spec,
         visibility: visibility,
         metadata: %{}
       }
 
       context = %{context | functions: [func_info | context.functions]}
       context = %{context | current_function: {name, arity}}
-      # Clear pending doc after use
-      context = %{context | pending_doc: nil}
+      # Clear pending doc and spec after use
+      context = %{context | pending_doc: nil, pending_spec: nil}
 
       # Traverse function body (not the entire def node to avoid infinite recursion)
       body =
@@ -302,5 +368,250 @@ defmodule Ragex.Analyzers.Elixir do
     else
       context
     end
+  end
+
+  # Extract type name and spec from type definition AST
+  defp extract_type_info({:"::", _meta, [name_part, type_spec]}) do
+    name = extract_type_name(name_part)
+    spec_string = format_type_spec(type_spec)
+    {name, spec_string}
+  end
+
+  defp extract_type_info(other) do
+    # Fallback for unexpected structures
+    {:unknown, inspect(other)}
+  end
+
+  defp extract_type_name({name, _meta, _args}) when is_atom(name), do: name
+  defp extract_type_name(_), do: :unknown
+
+  # Format type spec to string representation
+  defp format_type_spec(ast) do
+    # Use Macro.to_string for basic formatting
+    Macro.to_string(ast)
+  rescue
+    _ -> inspect(ast)
+  end
+
+  # Format spec to string representation
+  defp format_spec(spec_args) do
+    case spec_args do
+      [spec_ast] -> Macro.to_string(spec_ast)
+      _ -> inspect(spec_args)
+    end
+  rescue
+    _ -> inspect(spec_args)
+  end
+
+  # Extract comments from source code
+  defp extract_comments(source) do
+    source
+    |> String.split("\n")
+    |> Enum.with_index(1)
+    |> Enum.reduce([], fn {line, line_num}, acc ->
+      case Regex.run(~r/^\s*#\s*(.*)$/, line) do
+        [_, comment_text] ->
+          [{line_num, String.trim(comment_text)} | acc]
+
+        nil ->
+          acc
+      end
+    end)
+    |> Enum.reverse()
+  end
+
+  # Associate comments with undocumented entities
+  defp associate_comments(context) do
+    # Update modules without moduledoc
+    updated_modules =
+      Enum.map(context.modules, fn mod ->
+        if is_nil(mod.doc) || mod.doc == "" do
+          comment = find_nearby_comment(mod.line, context.comments, :before)
+          if comment, do: %{mod | doc: comment}, else: mod
+        else
+          mod
+        end
+      end)
+
+    # Update functions without doc
+    updated_functions =
+      Enum.map(context.functions, fn func ->
+        if is_nil(func.doc) || func.doc == "" do
+          comment = find_nearby_comment(func.line, context.comments, :before)
+          if comment, do: %{func | doc: comment}, else: func
+        else
+          func
+        end
+      end)
+
+    # Update types without typedoc
+    updated_types =
+      Enum.map(context.types, fn type ->
+        if is_nil(type.doc) || type.doc == "" do
+          comment = find_nearby_comment(type.line, context.comments, :before)
+          if comment, do: %{type | doc: comment}, else: type
+        else
+          type
+        end
+      end)
+
+    %{
+      context
+      | modules: updated_modules,
+        functions: updated_functions,
+        types: updated_types
+    }
+  end
+
+  # Find comment near a specific line
+  defp find_nearby_comment(target_line, comments, direction) do
+    case direction do
+      :before ->
+        # Look for comments 1-3 lines before
+        comments
+        |> Enum.filter(fn {line, _text} ->
+          line < target_line && target_line - line <= 3
+        end)
+        |> Enum.sort_by(fn {line, _text} -> -line end)
+        |> case do
+          [{_line, text} | _] -> text
+          [] -> nil
+        end
+
+      :after ->
+        # Look for comments 0-2 lines after
+        comments
+        |> Enum.filter(fn {line, _text} ->
+          line >= target_line && line - target_line <= 2
+        end)
+        |> Enum.sort_by(fn {line, _text} -> line end)
+        |> case do
+          [{_line, text} | _] -> text
+          [] -> nil
+        end
+    end
+  end
+
+  # Extract references from documentation
+  defp extract_doc_references(context) do
+    # Build a lookup of all entities for reference matching
+    all_modules = MapSet.new(context.modules, & &1.name)
+    all_functions = MapSet.new(context.functions, fn f -> {f.module, f.name, f.arity} end)
+    all_types = MapSet.new(context.types, fn t -> {t.module, t.name} end)
+
+    # Update modules with extracted references
+    updated_modules =
+      Enum.map(context.modules, fn mod ->
+        if mod.doc && is_binary(mod.doc) do
+          refs = parse_doc_references(mod.doc, all_modules, all_functions, all_types)
+          %{mod | metadata: Map.put(mod.metadata, :references, refs)}
+        else
+          mod
+        end
+      end)
+
+    # Update functions with extracted references
+    updated_functions =
+      Enum.map(context.functions, fn func ->
+        if func.doc && is_binary(func.doc) do
+          refs = parse_doc_references(func.doc, all_modules, all_functions, all_types)
+          %{func | metadata: Map.put(func.metadata, :references, refs)}
+        else
+          func
+        end
+      end)
+
+    # Update types with extracted references
+    updated_types =
+      Enum.map(context.types, fn type ->
+        if type.doc && is_binary(type.doc) do
+          refs = parse_doc_references(type.doc, all_modules, all_functions, all_types)
+          %{type | metadata: Map.put(type.metadata, :references, refs)}
+        else
+          type
+        end
+      end)
+
+    %{
+      context
+      | modules: updated_modules,
+        functions: updated_functions,
+        types: updated_types
+    }
+  end
+
+  # Parse documentation text for references
+  defp parse_doc_references(doc_text, modules, functions, _types) do
+    references = []
+
+    # Extract backtick-quoted code references like `MyModule.my_func/2`
+    code_refs =
+      Regex.scan(~r/`([A-Z][A-Za-z0-9_.]*)(?:\.([a-z_][a-z0-9_?!]*))?(?:\/([0-9]+))?`/, doc_text)
+      |> Enum.map(fn
+        [_, module_str, func_str, arity_str] when func_str != "" and arity_str != "" ->
+          module = String.to_existing_atom(module_str)
+          func = String.to_existing_atom(func_str)
+          arity = String.to_integer(arity_str)
+
+          if MapSet.member?(functions, {module, func, arity}) do
+            %{type: :function, module: module, name: func, arity: arity}
+          else
+            nil
+          end
+
+        [_, module_str, "", ""] ->
+          module = String.to_existing_atom(module_str)
+
+          if MapSet.member?(modules, module) do
+            %{type: :module, name: module}
+          else
+            nil
+          end
+
+        _ ->
+          nil
+      end)
+      |> Enum.reject(&is_nil/1)
+
+    references = references ++ code_refs
+
+    # Extract @see tags
+    see_refs =
+      Regex.scan(
+        ~r/@see\s+([A-Z][A-Za-z0-9_.]*)(?:\.([a-z_][a-z0-9_?!]*))?(?:\/([0-9]+))?/,
+        doc_text
+      )
+      |> Enum.map(fn
+        [_, module_str, func_str, arity_str] when func_str != "" and arity_str != "" ->
+          module = String.to_existing_atom(module_str)
+          func = String.to_existing_atom(func_str)
+          arity = String.to_integer(arity_str)
+
+          if MapSet.member?(functions, {module, func, arity}) do
+            %{type: :function, module: module, name: func, arity: arity, tag: :see}
+          else
+            nil
+          end
+
+        [_, module_str, "", ""] ->
+          module = String.to_existing_atom(module_str)
+
+          if MapSet.member?(modules, module) do
+            %{type: :module, name: module, tag: :see}
+          else
+            nil
+          end
+
+        _ ->
+          nil
+      end)
+      |> Enum.reject(&is_nil/1)
+
+    references = references ++ see_refs
+
+    Enum.uniq(references)
+  rescue
+    # If any atom conversion fails, return empty list
+    _ -> []
   end
 end

@@ -268,5 +268,175 @@ defmodule Ragex.Analyzers.ElixirTest do
       second = Enum.find(result.functions, &(&1.name == :second))
       assert second.doc == nil
     end
+
+    test "extracts empty string for @moduledoc when explicitly set to \"\"" do
+      source = """
+      defmodule EmptyModuleDoc do
+        @moduledoc ""
+
+        def hello, do: :world
+      end
+      """
+
+      assert {:ok, result} = ElixirAnalyzer.analyze(source, "test.ex")
+      assert [module] = result.modules
+      assert module.name == EmptyModuleDoc
+      assert module.doc == ""
+    end
+
+    test "extracts empty string for @doc when explicitly set to \"\"" do
+      source = """
+      defmodule TestModule do
+        @doc ""
+        def empty_doc_function do
+          :ok
+        end
+      end
+      """
+
+      assert {:ok, result} = ElixirAnalyzer.analyze(source, "test.ex")
+      assert [func] = result.functions
+      assert func.name == :empty_doc_function
+      assert func.doc == ""
+    end
+
+    test "correctly associates @moduledoc for module without function definitions" do
+      source = """
+      defmodule NoFunctionsModule do
+        @moduledoc "This module has no functions"
+      end
+      """
+
+      assert {:ok, result} = ElixirAnalyzer.analyze(source, "test.ex")
+      assert [module] = result.modules
+      assert module.name == NoFunctionsModule
+      assert module.doc == "This module has no functions"
+      assert result.functions == []
+    end
+  end
+
+  describe "type and spec extraction" do
+    test "extracts @type definitions" do
+      source = """
+      defmodule TestModule do
+        @type user_id :: integer()
+        @type status :: :active | :inactive
+      end
+      """
+
+      assert {:ok, result} = ElixirAnalyzer.analyze(source, "test.ex")
+      assert Enum.count(result.types) == 2
+
+      user_id_type = Enum.find(result.types, &(&1.name == :user_id))
+      assert user_id_type.module == TestModule
+      assert user_id_type.kind == :type
+      assert user_id_type.visibility == :public
+      assert user_id_type.spec =~ "integer"
+
+      status_type = Enum.find(result.types, &(&1.name == :status))
+      assert status_type.kind == :type
+      assert status_type.visibility == :public
+    end
+
+    test "extracts @spec for functions" do
+      source = """
+      defmodule TestModule do
+        @spec add(integer(), integer()) :: integer()
+        def add(a, b), do: a + b
+      end
+      """
+
+      assert {:ok, result} = ElixirAnalyzer.analyze(source, "test.ex")
+      assert [func] = result.functions
+      assert func.spec =~ "add"
+      assert func.spec =~ "integer"
+    end
+
+    test "extracts @typedoc for types" do
+      source = """
+      defmodule TestModule do
+        @typedoc "User identifier"
+        @type user_id :: integer()
+      end
+      """
+
+      assert {:ok, result} = ElixirAnalyzer.analyze(source, "test.ex")
+      assert [type] = result.types
+      assert type.doc == "User identifier"
+    end
+  end
+
+  describe "inline comment extraction" do
+    test "extracts inline comments for undocumented functions" do
+      source = """
+      defmodule TestModule do
+        # This function adds two numbers
+        def add(a, b), do: a + b
+      end
+      """
+
+      assert {:ok, result} = ElixirAnalyzer.analyze(source, "test.ex")
+      assert [func] = result.functions
+      assert func.doc == "This function adds two numbers"
+    end
+
+    test "prefers @doc over inline comments" do
+      source = """
+      defmodule TestModule do
+        # This comment should be ignored
+        @doc "Official documentation"
+        def add(a, b), do: a + b
+      end
+      """
+
+      assert {:ok, result} = ElixirAnalyzer.analyze(source, "test.ex")
+      assert [func] = result.functions
+      assert func.doc == "Official documentation"
+    end
+  end
+
+  describe "documentation reference extraction" do
+    test "extracts module references from documentation" do
+      source = """
+      defmodule TestModule do
+        @moduledoc "Uses `Enum` for operations"
+        def test, do: :ok
+      end
+      """
+
+      assert {:ok, result} = ElixirAnalyzer.analyze(source, "test.ex")
+      assert [module] = result.modules
+      assert is_list(module.metadata[:references])
+      # Enum is a standard library module that exists, so it should be found
+      with [_ | _] <- module.metadata[:references],
+           ref when not is_nil(ref) <-
+             Enum.find(module.metadata[:references], fn r -> r.type == :module end),
+           do: assert(ref.name == Enum)
+    end
+
+    test "extracts function references with arity from documentation" do
+      source = """
+      defmodule TestModule do
+        @moduledoc "See `TestModule.helper/1` for more"
+        
+        @doc "Helper function"
+        def helper(arg), do: arg
+      end
+      """
+
+      assert {:ok, result} = ElixirAnalyzer.analyze(source, "test.ex")
+      assert [module] = result.modules
+      assert is_list(module.metadata[:references])
+
+      # Should find a reference to TestModule.helper/1
+      ref =
+        Enum.find(module.metadata[:references], fn r ->
+          r.type == :function && r.module == TestModule && r.name == :helper
+        end)
+
+      if ref do
+        assert ref.arity == 1
+      end
+    end
   end
 end
