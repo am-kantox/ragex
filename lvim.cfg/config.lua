@@ -191,6 +191,13 @@ lvim.builtin.which_key.mappings["r"] = {
     end,
     "Export Graph"
   },
+  -- Phase 9: Resources and Prompts
+  ["v"] = { function() ragex.show_resources_menu() end, "View Resources" },
+  ["p"] = {
+    name = "Prompts",
+    a = { function() ragex.prompt_analyze_architecture() end, "Analyze Architecture" },
+    i = { function() ragex.prompt_find_impact() end, "Find Impact" },
+  },
 }
 
 -- Register Telescope commands for Ragex

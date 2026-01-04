@@ -425,6 +425,49 @@ function M.graph_stats()
   return M.execute("graph_stats", {})
 end
 
+-- Phase 9: MCP Resources
+
+-- Read a resource
+function M.read_resource(uri, callback)
+  if not M.config.enabled then
+    debug_log("Ragex is disabled")
+    return
+  end
+
+  local request = vim.fn.json_encode({
+    jsonrpc = "2.0",
+    method = "resources/read",
+    params = { uri = uri },
+    id = vim.fn.rand(),
+  })
+
+  debug_log("Resource request: " .. request)
+
+  local cmd = string.format(
+    "printf '%%s\\n' %s | socat - UNIX-CONNECT:/tmp/ragex_mcp.sock",
+    vim.fn.shellescape(request)
+  )
+
+  if callback then
+    vim.fn.jobstart(cmd, {
+      stdout_buffered = true,
+      on_stdout = function(_, data)
+        if data and #data > 0 then
+          local result_str = table.concat(data, "\n"):gsub("^%s+", ""):gsub("%s+$", "")
+          if result_str ~= "" then
+            local ok, result = pcall(vim.fn.json_decode, result_str)
+            if ok and result then
+              callback(result, nil)
+            else
+              callback(nil, "parse_error")
+            end
+          end
+        end
+      end,
+    })
+  end
+end
+
 -- Phase 8: Advanced Graph Algorithms
 
 -- Compute betweenness centrality
@@ -856,6 +899,175 @@ function M.toggle_auto_analyze()
     vim.api.nvim_del_augroup_by_name("RagexAnalysis")
     vim.notify("Ragex auto-analysis disabled", vim.log.levels.INFO)
   end
+end
+
+-- Show resource in floating window
+function M.show_resource(uri, title)
+  M.read_resource(uri, function(result, error_type)
+    if error_type or not result or not result.result then
+      vim.notify("Failed to read resource: " .. uri, vim.log.levels.ERROR)
+      return
+    end
+
+    -- Unwrap MCP resource response
+    local data = result.result
+    if data.contents and data.contents[1] and data.contents[1].text then
+      local ok, parsed = pcall(vim.fn.json_decode, data.contents[1].text)
+      if ok then
+        -- Pretty print JSON as YAML-like format
+        local lines = { "# " .. title, "" }
+        local function format_value(val, indent)
+          indent = indent or 0
+          local prefix = string.rep("  ", indent)
+          
+          if type(val) == "table" then
+            if vim.tbl_islist(val) then
+              for i, item in ipairs(val) do
+                table.insert(lines, prefix .. "- " .. tostring(item))
+              end
+            else
+              for k, v in pairs(val) do
+                if type(v) == "table" then
+                  table.insert(lines, prefix .. tostring(k) .. ":")
+                  format_value(v, indent + 1)
+                else
+                  table.insert(lines, prefix .. tostring(k) .. ": " .. tostring(v))
+                end
+              end
+            end
+          else
+            table.insert(lines, prefix .. tostring(val))
+          end
+        end
+        
+        format_value(parsed)
+        M.show_in_float(title, lines)
+      end
+    end
+  end)
+end
+
+-- Show all available resources
+function M.show_resources_menu()
+  local resources = {
+    { name = "Graph Statistics", uri = "ragex://graph/stats" },
+    { name = "Cache Status", uri = "ragex://cache/status" },
+    { name = "Model Configuration", uri = "ragex://model/config" },
+    { name = "Project Index", uri = "ragex://project/index" },
+    { name = "Algorithm Catalog", uri = "ragex://algorithms/catalog" },
+    { name = "Analysis Summary", uri = "ragex://analysis/summary" },
+  }
+  
+  vim.ui.select(resources, {
+    prompt = "Select Resource:",
+    format_item = function(item)
+      return item.name
+    end,
+  }, function(choice)
+    if choice then
+      M.show_resource(choice.uri, choice.name)
+    end
+  end)
+end
+
+-- Get a prompt (for interactive use)
+function M.get_prompt(name, arguments, callback)
+  if not M.config.enabled then
+    debug_log("Ragex is disabled")
+    return
+  end
+
+  local request = vim.fn.json_encode({
+    jsonrpc = "2.0",
+    method = "prompts/get",
+    params = {
+      name = name,
+      arguments = arguments or {},
+    },
+    id = vim.fn.rand(),
+  })
+
+  local cmd = string.format(
+    "printf '%%s\\n' %s | socat - UNIX-CONNECT:/tmp/ragex_mcp.sock",
+    vim.fn.shellescape(request)
+  )
+
+  if callback then
+    vim.fn.jobstart(cmd, {
+      stdout_buffered = true,
+      on_stdout = function(_, data)
+        if data and #data > 0 then
+          local result_str = table.concat(data, "\n"):gsub("^%s+", ""):gsub("%s+$", "")
+          if result_str ~= "" then
+            local ok, result = pcall(vim.fn.json_decode, result_str)
+            if ok and result then
+              callback(result, nil)
+            else
+              callback(nil, "parse_error")
+            end
+          end
+        end
+      end,
+    })
+  end
+end
+
+-- Execute analyze_architecture prompt
+function M.prompt_analyze_architecture()
+  vim.ui.input({ prompt = "Path to analyze: ", default = vim.fn.getcwd() }, function(path)
+    if not path then return end
+    
+    vim.ui.select({ "shallow", "deep" }, {
+      prompt = "Analysis depth:",
+    }, function(depth)
+      if not depth then return end
+      
+      M.get_prompt("analyze_architecture", { path = path, depth = depth }, function(result, err)
+        if err or not result or not result.result then
+          vim.notify("Failed to get prompt", vim.log.levels.ERROR)
+          return
+        end
+        
+        local prompt = result.result
+        local message = prompt.messages and prompt.messages[1]
+        if message and message.content and message.content.text then
+          -- Show the prompt instructions
+          local lines = vim.split(message.content.text, "\n")
+          M.show_in_float("Analyze Architecture: " .. path, lines)
+        end
+      end)
+    end)
+  end)
+end
+
+-- Execute find_impact prompt
+function M.prompt_find_impact()
+  local module = M.get_current_module()
+  if not module then
+    vim.notify("Could not determine current module", vim.log.levels.WARN)
+    return
+  end
+  
+  local func = vim.fn.expand("<cword>")
+  local arity = M.get_function_arity()
+  
+  M.get_prompt("find_impact", {
+    module = module,
+    ["function"] = func,
+    arity = tostring(arity),
+  }, function(result, err)
+    if err or not result or not result.result then
+      vim.notify("Failed to get prompt", vim.log.levels.ERROR)
+      return
+    end
+    
+    local prompt = result.result
+    local message = prompt.messages and prompt.messages[1]
+    if message and message.content and message.content.text then
+      local lines = vim.split(message.content.text, "\n")
+      M.show_in_float("Find Impact: " .. module .. "." .. func .. "/" .. arity, lines)
+    end
+  end)
 end
 
 -- Setup function
