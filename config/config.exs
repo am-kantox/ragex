@@ -66,16 +66,66 @@ config :ragex, :search,
   # Lower threshold for hybrid search (more recall)
   hybrid_threshold: 0.15
 
-# AI Provider Configuration
+# AI Provider Configuration (Phase 4)
+# Multi-provider support with fallback
 config :ragex, :ai,
-  provider: :deepseek_r1,
-  endpoint: "https://api.deepseek.com",
-  model: "deepseek-chat",
-  options: [
-    temperature: 0.7,
-    max_tokens: 2048,
-    stream: false
+  providers: [:openai, :anthropic, :deepseek_r1, :ollama],
+  default_provider: :openai,
+  fallback_enabled: true
+
+# Provider-specific configurations
+config :ragex, :ai_providers,
+  openai: [
+    endpoint: "https://api.openai.com/v1",
+    model: "gpt-4-turbo",
+    options: [
+      temperature: 0.7,
+      max_tokens: 2048,
+      stream: false
+    ]
+  ],
+  anthropic: [
+    endpoint: "https://api.anthropic.com/v1",
+    model: "claude-3-sonnet-20240229",
+    options: [
+      temperature: 0.7,
+      max_tokens: 2048
+    ]
+  ],
+  deepseek_r1: [
+    endpoint: "https://api.deepseek.com",
+    model: "deepseek-chat",
+    options: [
+      temperature: 0.7,
+      max_tokens: 2048,
+      stream: false
+    ]
+  ],
+  ollama: [
+    endpoint: "http://localhost:11434",
+    model: "codellama",
+    options: [
+      temperature: 0.7,
+      max_tokens: 2048
+    ]
   ]
+
+# AI Cache Configuration (Phase 4B)
+config :ragex, :ai_cache,
+  enabled: true,
+  ttl: 3600,
+  max_size: 1000,
+  operation_caches: %{
+    query: %{ttl: 3600, max_size: 500},
+    explain: %{ttl: 7200, max_size: 300},
+    suggest: %{ttl: 1800, max_size: 200}
+  }
+
+# Rate Limiting Configuration (Phase 4C)
+config :ragex, :ai_limits,
+  max_requests_per_minute: 60,
+  max_requests_per_hour: 1000,
+  max_tokens_per_day: 100_000
 
 # Feature Flags
 config :ragex, :features,

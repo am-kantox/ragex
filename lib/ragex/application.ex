@@ -34,6 +34,10 @@ defmodule Ragex.Application do
       Ragex.Watcher,
       # AI Provider Registry
       Ragex.AI.Provider.Registry,
+      # AI response caching
+      Ragex.AI.Cache,
+      # AI usage tracking and rate limiting
+      Ragex.AI.Usage,
       # MCP socket server for persistent connections
       Ragex.MCP.SocketServer,
       # MCP server handles stdio communication (for stdio-based clients)

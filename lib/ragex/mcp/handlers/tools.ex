@@ -4,6 +4,7 @@ defmodule Ragex.MCP.Handlers.Tools do
 
   Implements the tools/list and tools/call methods.
   """
+  alias Ragex.AI.{Cache, Usage}
   alias Ragex.Analyzers.Directory
   alias Ragex.Analyzers.Elixir, as: ElixirAnalyzer
   alias Ragex.Analyzers.Erlang, as: ErlangAnalyzer
@@ -188,6 +189,42 @@ defmodule Ragex.MCP.Handlers.Tools do
           inputSchema: %{
             type: "object",
             properties: %{}
+          }
+        },
+        %{
+          name: "get_ai_usage",
+          description: "Get AI provider usage statistics (requests, tokens, costs)",
+          inputSchema: %{
+            type: "object",
+            properties: %{
+              provider: %{
+                type: "string",
+                description: "Filter by provider (openai, anthropic, deepseek_r1, ollama)",
+                enum: ["openai", "anthropic", "deepseek_r1", "ollama"]
+              }
+            }
+          }
+        },
+        %{
+          name: "get_ai_cache_stats",
+          description: "Get AI response cache statistics and hit rates",
+          inputSchema: %{
+            type: "object",
+            properties: %{}
+          }
+        },
+        %{
+          name: "clear_ai_cache",
+          description: "Clear AI response cache (all or specific operation)",
+          inputSchema: %{
+            type: "object",
+            properties: %{
+              operation: %{
+                type: "string",
+                description: "Operation to clear (query, explain, suggest, or all)",
+                enum: ["query", "explain", "suggest", "all"]
+              }
+            }
           }
         },
         %{
@@ -649,8 +686,8 @@ defmodule Ragex.MCP.Handlers.Tools do
               },
               provider: %{
                 type: "string",
-                description: "AI provider override (deepseek_r1, etc.)",
-                enum: ["deepseek_r1"]
+                description: "AI provider override",
+                enum: ["deepseek_r1", "openai", "anthropic", "ollama"]
               }
             },
             required: ["query"]
@@ -732,6 +769,15 @@ defmodule Ragex.MCP.Handlers.Tools do
 
       "get_embeddings_stats" ->
         get_embeddings_stats(arguments)
+
+      "get_ai_usage" ->
+        get_ai_usage_tool(arguments)
+
+      "get_ai_cache_stats" ->
+        get_ai_cache_stats_tool(arguments)
+
+      "clear_ai_cache" ->
+        clear_ai_cache_tool(arguments)
 
       "find_paths" ->
         find_paths_tool(arguments)
@@ -2025,10 +2071,9 @@ defmodule Ragex.MCP.Handlers.Tools do
          %{
            status: "success",
            query: query,
-           response: result.response,
+           response: result.content,
            sources_count: length(result.sources),
-           model_used: result.model,
-           provider: result.provider
+           model_used: result.model
          }}
 
       {:error, reason} ->
@@ -2043,13 +2088,13 @@ defmodule Ragex.MCP.Handlers.Tools do
 
     opts = [aspect: aspect]
 
-    case Pipeline.explain(target, opts) do
+    case Pipeline.explain(target, aspect, opts) do
       {:ok, result} ->
         {:ok,
          %{
            status: "success",
            target: target,
-           explanation: result.response,
+           explanation: result.content,
            aspect: Atom.to_string(aspect),
            sources_count: length(result.sources),
            model_used: result.model
@@ -2067,13 +2112,13 @@ defmodule Ragex.MCP.Handlers.Tools do
 
     opts = [focus: focus]
 
-    case Pipeline.suggest(target, opts) do
+    case Pipeline.suggest(target, focus, opts) do
       {:ok, result} ->
         {:ok,
          %{
            status: "success",
            target: target,
-           suggestions: result.response,
+           suggestions: result.content,
            focus: Atom.to_string(focus),
            sources_count: length(result.sources),
            model_used: result.model
@@ -2088,5 +2133,95 @@ defmodule Ragex.MCP.Handlers.Tools do
 
   defp parse_provider(nil), do: nil
   defp parse_provider("deepseek_r1"), do: :deepseek_r1
+  defp parse_provider("openai"), do: :openai
+  defp parse_provider("anthropic"), do: :anthropic
+  defp parse_provider("ollama"), do: :ollama
   defp parse_provider(_), do: nil
+
+  # AI monitoring tool implementations
+
+  defp get_ai_usage_tool(params) do
+    provider_str = Map.get(params, "provider")
+
+    stats =
+      if provider_str do
+        provider = String.to_atom(provider_str)
+        %{provider => Usage.get_stats(provider)}
+      else
+        Usage.get_stats(:all)
+      end
+
+    {:ok,
+     %{
+       status: "success",
+       providers:
+         Enum.map(stats, fn {provider, provider_stats} ->
+           %{
+             provider: Atom.to_string(provider),
+             total_requests: provider_stats.total_requests,
+             total_prompt_tokens: provider_stats.total_prompt_tokens,
+             total_completion_tokens: provider_stats.total_completion_tokens,
+             total_tokens: provider_stats.total_tokens,
+             estimated_cost: provider_stats.estimated_cost,
+             by_model:
+               Enum.map(provider_stats.by_model, fn {model, model_stats} ->
+                 %{
+                   model: model,
+                   requests: model_stats.requests,
+                   total_tokens: model_stats.total_tokens,
+                   cost: model_stats.cost
+                 }
+               end)
+           }
+         end)
+     }}
+  end
+
+  defp get_ai_cache_stats_tool(_params) do
+    stats = Cache.stats()
+
+    {:ok,
+     %{
+       status: "success",
+       enabled: stats.enabled,
+       size: stats.size,
+       max_size: stats.max_size,
+       ttl: stats.ttl,
+       hits: stats.hits,
+       misses: stats.misses,
+       puts: stats.puts,
+       evictions: stats.evictions,
+       hit_rate: Float.round(stats.hit_rate, 4),
+       by_operation:
+         Enum.map(stats.by_operation, fn {operation, op_stats} ->
+           %{
+             operation: Atom.to_string(operation),
+             size: op_stats.size,
+             ttl: op_stats.ttl,
+             max_size: op_stats.max_size,
+             hits: op_stats.hits,
+             misses: op_stats.misses,
+             hit_rate: Float.round(op_stats.hit_rate, 4)
+           }
+         end)
+     }}
+  end
+
+  defp clear_ai_cache_tool(params) do
+    operation_str = Map.get(params, "operation", "all")
+
+    case operation_str do
+      "all" ->
+        Cache.clear()
+
+      op ->
+        Cache.clear(String.to_atom(op))
+    end
+
+    {:ok,
+     %{
+       status: "success",
+       message: "Cache cleared for: #{operation_str}"
+     }}
+  end
 end

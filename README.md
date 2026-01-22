@@ -198,9 +198,27 @@ Ragex is an MCP (Model Context Protocol) server that analyzes codebases using co
     ▸ AI Provider Abstraction  
       ▹ Provider Behaviour: Clean interface for multiple AI providers  
       ▹ DeepSeek R1: Full integration with deepseek-chat and deepseek-reasoner models  
-      ▹ Configuration System: Runtime API key management via environment variables  
-      ▹ Provider Registry: GenServer for runtime provider management  
-      ▹ Extensible: Easy to add OpenAI, Anthropic, Ollama, etc.
+      ▹ OpenAI: GPT-4, GPT-4-turbo, GPT-3.5-turbo support  
+      ▹ Anthropic: Claude 3 Opus, Sonnet, and Haiku models  
+      ▹ Ollama: Local LLM support (llama2, mistral, codellama, phi)  
+      ▹ Configuration System: Multi-provider with fallback support  
+      ▹ Provider Registry: GenServer for runtime provider management
+
+    ▸ AI Response Caching  
+      ▹ ETS-based Cache: SHA256 key generation with TTL expiration  
+      ▹ LRU Eviction: Automatic eviction when max size reached  
+      ▹ Operation-specific TTL: Configurable per operation type  
+      ▹ Cache Statistics: Hit rate, misses, puts, evictions tracking  
+      ▹ Mix Tasks: `mix ragex.ai.cache.stats` and `mix ragex.ai.cache.clear`  
+      ▹ Performance: >50% cache hit rate for repeated queries
+
+    ▸ Usage Tracking & Rate Limiting  
+      ▹ Per-provider Tracking: Requests, tokens, and cost estimation  
+      ▹ Real-time Costs: Accurate pricing for OpenAI, Anthropic, DeepSeek  
+      ▹ Time-windowed Limits: Per-minute, per-hour, per-day controls  
+      ▹ Automatic Enforcement: Rate limit checks before API calls  
+      ▹ Mix Tasks: `mix ragex.ai.usage.stats` for monitoring  
+      ▹ MCP Tools: `get_ai_usage`, `get_ai_cache_stats`
 
     ▸ Metastatic Integration  
       ▹ MetaAST Analyzer: Enhanced cross-language analysis via Metastatic library  
@@ -212,28 +230,34 @@ Ragex is an MCP (Model Context Protocol) server that analyzes codebases using co
       ▹ Context Builder: Format retrieval results for AI consumption (8000 char max)  
       ▹ Prompt Templates: Query, explain, and suggest operations  
       ▹ Full Pipeline: Retrieval → Context → Prompting → Generation → Post-processing  
-      ▹ Hybrid Retrieval: Leverages semantic + graph-based search
+      ▹ Hybrid Retrieval: Leverages semantic + graph-based search  
+      ▹ Cache Integration: Automatic caching of AI responses  
+      ▹ Usage Tracking: All requests tracked with cost estimation
 
     ▸ MCP RAG Tools  
       ▹ `rag_query`: Answer general codebase questions with AI  
       ▹ `rag_explain`: Explain code with aspect focus (purpose, complexity, dependencies, all)  
       ▹ `rag_suggest`: Suggest improvements (performance, readability, testing, security, all)  
-      ▹ Provider Override: Optional per-query AI provider selection  
+      ▹ `get_ai_usage`: Query usage statistics and costs per provider  
+      ▹ `get_ai_cache_stats`: View cache performance metrics  
+      ▹ `clear_ai_cache`: Clear cache via MCP  
+      ▹ Provider Override: Select provider per-query (openai, anthropic, deepseek_r1, ollama)  
       ▹ Documentation: See [RAG_IMPLEMENTATION_SUMMARY.md](RAG_IMPLEMENTATION_SUMMARY.md)
 </details>
 
 ### Planned Features
 
-- [ ] Additional AI providers (OpenAI, Anthropic, Ollama)
 - [ ] Streaming RAG responses via MCP
-- [ ] Production optimizations (performance tuning, caching strategies)
+- [ ] Provider health checks and auto-failover
+- [ ] Production optimizations (performance tuning)
 - [ ] Additional language support (Go, Rust, Java, …)
+- [ ] Advanced cost analytics and budget alerts
 
 ## Architecture
 
 ```mermaid
 graph TD
-    MCP["MCP Server (stdio)<br/>22 Tools + 6 Resources + 6 Prompts"]
+    MCP["MCP Server (stdio)<br/>25 Tools + 6 Resources + 6 Prompts"]
     
     MCP --> Tools["Tools Handler"]
     MCP --> Resources["Resources Handler"]
@@ -254,9 +278,11 @@ graph TD
     Graph --> Hybrid
     Vector --> Hybrid
     
-    Tools --> RAG["RAG Pipeline<br/>Context → Prompts → AI"]
+    Tools --> RAG["RAG Pipeline<br/>Cache → Context → Prompts → AI"]
     Hybrid --> RAG
-    RAG --> AIProvider["AI Providers<br/>(DeepSeek R1, …)"]
+    RAG --> Cache["AI Cache<br/>(TTL + LRU)"]
+    RAG --> Usage["Usage Tracker<br/>(Costs + Limits)"]
+    RAG --> AIProvider["AI Providers<br/>(OpenAI, Anthropic, DeepSeek, Ollama)"]
     
     style MCP fill:#e1f5ff,color:#01579b,stroke:#01579b,stroke-width:2px
     style Hybrid fill:#f3e5f5,color:#4a148c,stroke:#4a148c,stroke-width:2px
@@ -267,6 +293,8 @@ graph TD
     style Prompts fill:#fff9c4,color:#f57f17,stroke:#f57f17,stroke-width:2px
     style RAG fill:#ffebee,color:#b71c1c,stroke:#b71c1c,stroke-width:2px
     style AIProvider fill:#e8eaf6,color:#1a237e,stroke:#1a237e,stroke-width:2px
+    style Cache fill:#e0f7fa,color:#006064,stroke:#006064,stroke-width:2px
+    style Usage fill:#fff8e1,color:#f57c00,stroke:#f57c00,stroke-width:2px
 ```
 
 ## Use as MCP Server

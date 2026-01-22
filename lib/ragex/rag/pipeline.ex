@@ -13,7 +13,7 @@ defmodule Ragex.RAG.Pipeline do
 
   require Logger
 
-  alias Ragex.AI.Config
+  alias Ragex.AI.{Cache, Config, Usage}
   alias Ragex.RAG.{ContextBuilder, PromptTemplate}
   alias Ragex.Retrieval.Hybrid
 
@@ -36,7 +36,7 @@ defmodule Ragex.RAG.Pipeline do
     with {:ok, retrieval_results} <- retrieve(user_query, opts),
          {:ok, context} <- build_context(retrieval_results, opts),
          {:ok, prompt} <- build_prompt(user_query, context, opts),
-         {:ok, response} <- generate(prompt, context, opts) do
+         {:ok, response} <- generate_with_cache(:query, prompt, context, opts) do
       format_response(response, retrieval_results)
     end
   end
@@ -51,6 +51,7 @@ defmodule Ragex.RAG.Pipeline do
       opts
       |> Keyword.put(:system_prompt, explain_system_prompt())
       |> Keyword.put(:limit, 5)
+      |> Keyword.put(:operation, :explain)
 
     query(query_text, opts)
   end
@@ -65,6 +66,7 @@ defmodule Ragex.RAG.Pipeline do
       opts
       |> Keyword.put(:system_prompt, suggest_system_prompt())
       |> Keyword.put(:limit, 3)
+      |> Keyword.put(:operation, :suggest)
 
     query(query_text, opts)
   end
@@ -105,15 +107,68 @@ defmodule Ragex.RAG.Pipeline do
     {:ok, prompt}
   end
 
-  defp generate(prompt, context, opts) do
+  defp generate_with_cache(operation, prompt, context, opts) do
     provider = get_provider(opts)
+    provider_name = get_provider_name(opts)
 
-    ai_opts = [
+    # Check rate limiting first
+    case Usage.check_rate_limit(provider_name) do
+      :ok ->
+        # Try cache - pass provider/model in cache_opts
+        cache_opts = [
+          provider: provider_name,
+          model: get_model_name(provider, opts),
+          temperature: Keyword.get(opts, :temperature, 0.7),
+          max_tokens: Keyword.get(opts, :max_tokens, 2048)
+        ]
+
+        case Cache.get(operation, prompt, context, cache_opts) do
+          {:ok, cached_response} ->
+            Logger.debug("Cache hit for #{operation} operation")
+            {:ok, cached_response}
+
+          {:error, :not_found} ->
+            Logger.debug("Cache miss for #{operation} operation")
+            # Generate and cache
+            case generate_with_tracking(provider, provider_name, prompt, context, opts) do
+              {:ok, response} = result ->
+                Cache.put(operation, prompt, context, response, cache_opts)
+                result
+
+              error ->
+                error
+            end
+        end
+
+      {:error, reason} ->
+        Logger.warning("Rate limit exceeded: #{reason}")
+        {:error, {:rate_limited, reason}}
+    end
+  end
+
+  defp generate_with_tracking(provider, provider_name, prompt, context, opts) do
+    ai_opts = ai_generation_opts(opts)
+    model = get_model_name(provider, opts)
+
+    case provider.generate(prompt, %{context: context}, ai_opts) do
+      {:ok, response} = result ->
+        # Track usage
+        prompt_tokens = get_in(response, [:usage, :prompt_tokens]) || 0
+        completion_tokens = get_in(response, [:usage, :completion_tokens]) || 0
+        Usage.record_request(provider_name, model, prompt_tokens, completion_tokens)
+
+        result
+
+      error ->
+        error
+    end
+  end
+
+  defp ai_generation_opts(opts) do
+    [
       temperature: Keyword.get(opts, :temperature, 0.7),
       max_tokens: Keyword.get(opts, :max_tokens, 2048)
     ]
-
-    provider.generate(prompt, %{context: context}, ai_opts)
   end
 
   defp format_response({:ok, ai_response}, retrieval_results) do
@@ -152,7 +207,34 @@ defmodule Ragex.RAG.Pipeline do
     end
   end
 
+  defp get_provider_name(opts) do
+    case Keyword.get(opts, :provider) do
+      nil -> Config.provider_name()
+      provider_atom when is_atom(provider_atom) -> provider_atom
+    end
+  end
+
+  defp get_model_name(provider, opts) do
+    case Keyword.get(opts, :model) do
+      nil ->
+        # Get default model from provider
+        case provider do
+          Ragex.AI.Provider.OpenAI -> "gpt-4-turbo"
+          Ragex.AI.Provider.Anthropic -> "claude-3-sonnet-20240229"
+          Ragex.AI.Provider.Ollama -> "codellama"
+          Ragex.AI.Provider.DeepSeekR1 -> "deepseek-chat"
+          _ -> "unknown"
+        end
+
+      model when is_binary(model) ->
+        model
+    end
+  end
+
   defp provider_module(:deepseek_r1), do: Ragex.AI.Provider.DeepSeekR1
+  defp provider_module(:openai), do: Ragex.AI.Provider.OpenAI
+  defp provider_module(:anthropic), do: Ragex.AI.Provider.Anthropic
+  defp provider_module(:ollama), do: Ragex.AI.Provider.Ollama
   defp provider_module(_), do: Config.provider()
 
   defp default_system_prompt do
