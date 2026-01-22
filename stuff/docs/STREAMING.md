@@ -1,6 +1,6 @@
 # Streaming Responses in Ragex
 
-This document explains the streaming response functionality added in Phase 5A.
+This document explains the streaming response functionality.
 
 ## Overview
 
@@ -82,16 +82,6 @@ rag_query_stream    - Streaming version of rag_query
 rag_explain_stream  - Streaming version of rag_explain
 rag_suggest_stream  - Streaming version of rag_suggest
 ```
-
-**Current behavior (Phase 5A):**
-- Collects all chunks internally
-- Returns complete response (non-streaming from MCP perspective)
-- Optional `show_chunks` parameter for debugging
-
-**Future (Phase 5C):**
-- Full MCP notification protocol support
-- Real-time chunk delivery to MCP clients
-- Cancellation via MCP protocol
 
 ## Usage Examples
 
@@ -267,7 +257,7 @@ config :ragex, :ai_providers,
   ]
 ```
 
-## Future Enhancements (Phase 5C)
+## What’s there
 
 1. **Full MCP Streaming Protocol**
    - Emit JSON-RPC notifications for each chunk
@@ -285,11 +275,6 @@ config :ragex, :ai_providers,
    - Predictive prefetching
 
 ## Limitations
-
-**Current (Phase 5A):**
-- MCP tools collect all chunks before returning (no real-time emission)
-- Streaming responses not cached (cache lookup still happens)
-- No built-in cancellation API (must drop stream reference)
 
 **Protocol:**
 - OpenAI: Requires `stream_options: %{include_usage: true}` for token counts
@@ -324,4 +309,3 @@ config :ragex, :ai_providers,
 - `lib/ragex/ai/provider/*` - Provider implementations
 - `lib/ragex/rag/pipeline.ex` - Pipeline streaming functions
 - `lib/ragex/mcp/handlers/tools.ex` - MCP streaming tools
-- `PHASE5A_COMPLETE.md` - Phase 5A completion summary

@@ -1,7 +1,5 @@
 # MetaAST-Enhanced Retrieval
 
-Phase 5B implementation for Ragex RAG system.
-
 ## Overview
 
 MetaAST-enhanced retrieval leverages semantic metadata from the Metastatic analyzer to improve code search accuracy and relevance. This system combines:

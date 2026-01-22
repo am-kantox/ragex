@@ -61,7 +61,7 @@ Ragex is an MCP (Model Context Protocol) server that analyzes codebases using co
 
     ▸ Enhanced Graph Queries  
       ▹ PageRank: Importance scoring based on call relationships  
-      ▹ Path Finding: Discover call chains between functions (with Phase 4D limits)  
+      ▹ Path Finding: Discover call chains between functions (with limits)  
       ▹ Degree Centrality: In-degree, out-degree, and total degree metrics  
       ▹ Graph Statistics: Comprehensive codebase analysis  
       ▹ MCP Tools: `find_paths` and `graph_stats` tools
@@ -249,7 +249,7 @@ Ragex is an MCP (Model Context Protocol) server that analyzes codebases using co
       ▹ Provider Override: Select provider per-query (openai, anthropic, deepseek_r1, ollama)  
       ▹ Documentation: See [RAG_IMPLEMENTATION_SUMMARY.md](RAG_IMPLEMENTATION_SUMMARY.md) and [STREAMING.md](STREAMING.md)
 
-    ▸ MetaAST-Enhanced Retrieval (Phase 5B - COMPLETE)  
+    ▸ MetaAST-Enhanced Retrieval
       ▹ Context-Aware Ranking: Query intent detection (explain, refactor, example, debug)  
       ▹ Purity Analysis: Boost pure functions, penalize side effects  
       ▹ Complexity Scoring: Favor simple code for explanations, complex code for refactoring  
@@ -258,20 +258,19 @@ Ragex is an MCP (Model Context Protocol) server that analyzes codebases using co
       ▹ Pattern Search: Find all implementations of MetaAST patterns (map, filter, lambda, etc.)  
       ▹ Hybrid Integration: MetaAST ranking applied to all search strategies  
       ▹ MCP Tools: `metaast_search`, `cross_language_alternatives`, `expand_query`, `find_metaast_pattern`  
-      ▹ Documentation: See [METAAST_RETRIEVAL.md](METAAST_RETRIEVAL.md)
 </details>
 
 ### Planned Features
 
-- [x] Streaming RAG responses (Phase 5A complete - internal streaming)
-- [x] MCP streaming notifications (Phase 5C complete - real-time progress tracking)
-- [x] MetaAST-enhanced retrieval (Phase 5B complete)
-- [ ] Provider health checks and auto-failover (future)
-- [ ] Production optimizations (Phase 6)
-- [ ] Additional language support (Phase 7: Go, Rust, Java)
-- [ ] Enhanced refactoring capabilities (Phase 10)
-- [ ] Advanced analysis and insights (Phase 11)
-- [ ] Developer experience improvements (Phase 12)
+- [x] Streaming RAG responses
+- [x] MCP streaming notifications
+- [x] MetaAST-enhanced retrieval
+- [ ] Provider health checks and auto-failover
+- [ ] Production optimizations
+- [ ] Additional language support
+- [ ] Enhanced refactoring capabilities
+- [ ] Advanced analysis and insights
+- [ ] Developer experience improvements
 
 ## Architecture
 
@@ -425,7 +424,7 @@ lvim.builtin.which_key.mappings["r"] = {
   },
   W = { function() ragex.watch_directory(vim.fn.getcwd()) end, "Watch Directory" },
   t = { function() ragex.toggle_auto_analyze() end, "Toggle Auto-Analysis" },
-  -- Phase 8: Advanced Graph Algorithms
+  -- Advanced Graph Algorithms
   b = { function() ragex.show_betweenness_centrality() end, "Betweenness Centrality" },
   o = { function() ragex.show_closeness_centrality() end, "Closeness Centrality" },
   n = { function() ragex.show_communities("louvain") end, "Detect Communities (Louvain)" },
