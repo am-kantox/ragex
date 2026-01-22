@@ -4,17 +4,18 @@ defmodule Ragex.MCP.Handlers.Tools do
 
   Implements the tools/list and tools/call methods.
   """
-
   alias Ragex.Analyzers.Directory
   alias Ragex.Analyzers.Elixir, as: ElixirAnalyzer
   alias Ragex.Analyzers.Erlang, as: ErlangAnalyzer
   alias Ragex.Analyzers.JavaScript, as: JavaScriptAnalyzer
+  alias Ragex.Analyzers.Metastatic
   alias Ragex.Analyzers.Python, as: PythonAnalyzer
   alias Ragex.Editor.{Core, Refactor, Transaction, Types}
   alias Ragex.Embeddings.Bumblebee
   alias Ragex.Embeddings.Helper, as: EmbeddingsHelper
   alias Ragex.Graph.Algorithms
   alias Ragex.Graph.Store
+  alias Ragex.RAG.Pipeline
   alias Ragex.Retrieval.Hybrid
   alias Ragex.VectorStore
   alias Ragex.Watcher
@@ -625,6 +626,75 @@ defmodule Ragex.MCP.Handlers.Tools do
             },
             required: ["files"]
           }
+        },
+        %{
+          name: "rag_query",
+          description: "Query codebase using RAG (Retrieval-Augmented Generation) with AI",
+          inputSchema: %{
+            type: "object",
+            properties: %{
+              query: %{
+                type: "string",
+                description: "Natural language query about the codebase"
+              },
+              limit: %{
+                type: "integer",
+                description: "Maximum number of code snippets to retrieve",
+                default: 10
+              },
+              include_code: %{
+                type: "boolean",
+                description: "Include full code snippets in context",
+                default: true
+              },
+              provider: %{
+                type: "string",
+                description: "AI provider override (deepseek_r1, etc.)",
+                enum: ["deepseek_r1"]
+              }
+            },
+            required: ["query"]
+          }
+        },
+        %{
+          name: "rag_explain",
+          description: "Explain code using RAG with AI assistance",
+          inputSchema: %{
+            type: "object",
+            properties: %{
+              target: %{
+                type: "string",
+                description: "File path or function identifier (e.g., 'MyModule.function/2')"
+              },
+              aspect: %{
+                type: "string",
+                description: "What to explain",
+                enum: ["purpose", "complexity", "dependencies", "all"],
+                default: "all"
+              }
+            },
+            required: ["target"]
+          }
+        },
+        %{
+          name: "rag_suggest",
+          description: "Suggest code improvements using RAG with AI",
+          inputSchema: %{
+            type: "object",
+            properties: %{
+              target: %{
+                type: "string",
+                description: "File path or function identifier"
+              },
+              focus: %{
+                type: "string",
+                description: "Improvement focus area",
+                enum: ["performance", "readability", "testing", "security", "all"],
+                default: "all"
+              }
+            },
+            required: ["target"]
+          }
         }
       ]
     }
@@ -701,6 +771,15 @@ defmodule Ragex.MCP.Handlers.Tools do
 
       "export_graph" ->
         export_graph_tool(arguments)
+
+      "rag_query" ->
+        rag_query_tool(arguments)
+
+      "rag_explain" ->
+        rag_explain_tool(arguments)
+
+      "rag_suggest" ->
+        rag_suggest_tool(arguments)
 
       _ ->
         {:error, "Unknown tool: #{tool_name}"}
@@ -804,6 +883,46 @@ defmodule Ragex.MCP.Handlers.Tools do
   end
 
   defp get_analyzer("auto", path) do
+    # Check if Metastatic is enabled and supports this file
+    if use_metastatic?() and metastatic_supports?(path) do
+      Ragex.Analyzers.Metastatic
+    else
+      get_native_analyzer(path)
+    end
+  end
+
+  defp get_analyzer("elixir", path) do
+    if use_metastatic?() and metastatic_supports?(path),
+      do: Ragex.Analyzers.Metastatic,
+      else: ElixirAnalyzer
+  end
+
+  defp get_analyzer("erlang", path) do
+    if use_metastatic?() and metastatic_supports?(path),
+      do: Ragex.Analyzers.Metastatic,
+      else: ErlangAnalyzer
+  end
+
+  defp get_analyzer("python", path) do
+    if use_metastatic?() and metastatic_supports?(path),
+      do: Ragex.Analyzers.Metastatic,
+      else: PythonAnalyzer
+  end
+
+  defp get_analyzer("javascript", _path), do: JavaScriptAnalyzer
+  defp get_analyzer("typescript", _path), do: JavaScriptAnalyzer
+  defp get_analyzer(_, path), do: get_analyzer("auto", path)
+
+  defp use_metastatic? do
+    Application.get_env(:ragex, :features)[:use_metastatic] == true
+  end
+
+  defp metastatic_supports?(path) do
+    ext = Path.extname(path)
+    ext in Metastatic.supported_extensions()
+  end
+
+  defp get_native_analyzer(path) do
     ext = Path.extname(path)
 
     cond do
@@ -816,13 +935,7 @@ defmodule Ragex.MCP.Handlers.Tools do
     end
   end
 
-  defp get_analyzer("elixir", _path), do: ElixirAnalyzer
-  defp get_analyzer("erlang", _path), do: ErlangAnalyzer
-  defp get_analyzer("python", _path), do: PythonAnalyzer
-  defp get_analyzer("javascript", _path), do: JavaScriptAnalyzer
-  defp get_analyzer("typescript", _path), do: JavaScriptAnalyzer
-  defp get_analyzer(_, path), do: get_analyzer("auto", path)
-
+  defp get_language_name(Ragex.Analyzers.Metastatic), do: "metastatic"
   defp get_language_name(ElixirAnalyzer), do: "elixir"
   defp get_language_name(ErlangAnalyzer), do: "erlang"
   defp get_language_name(PythonAnalyzer), do: "python"
@@ -1891,4 +2004,89 @@ defmodule Ragex.MCP.Handlers.Tools do
         {:error, "Unknown format: #{format}"}
     end
   end
+
+  # RAG tool implementations
+
+  defp rag_query_tool(%{"query" => query} = params) do
+    limit = Map.get(params, "limit", 10)
+    include_code = Map.get(params, "include_code", true)
+    provider = parse_provider(Map.get(params, "provider"))
+
+    opts = [
+      limit: limit,
+      include_code: include_code
+    ]
+
+    opts = if provider, do: Keyword.put(opts, :provider, provider), else: opts
+
+    case Pipeline.query(query, opts) do
+      {:ok, result} ->
+        {:ok,
+         %{
+           status: "success",
+           query: query,
+           response: result.response,
+           sources_count: length(result.sources),
+           model_used: result.model,
+           provider: result.provider
+         }}
+
+      {:error, reason} ->
+        {:error, "RAG query failed: #{inspect(reason)}"}
+    end
+  end
+
+  defp rag_query_tool(_), do: {:error, "Missing 'query' parameter"}
+
+  defp rag_explain_tool(%{"target" => target} = params) do
+    aspect = String.to_atom(Map.get(params, "aspect", "all"))
+
+    opts = [aspect: aspect]
+
+    case Pipeline.explain(target, opts) do
+      {:ok, result} ->
+        {:ok,
+         %{
+           status: "success",
+           target: target,
+           explanation: result.response,
+           aspect: Atom.to_string(aspect),
+           sources_count: length(result.sources),
+           model_used: result.model
+         }}
+
+      {:error, reason} ->
+        {:error, "RAG explain failed: #{inspect(reason)}"}
+    end
+  end
+
+  defp rag_explain_tool(_), do: {:error, "Missing 'target' parameter"}
+
+  defp rag_suggest_tool(%{"target" => target} = params) do
+    focus = String.to_atom(Map.get(params, "focus", "all"))
+
+    opts = [focus: focus]
+
+    case Pipeline.suggest(target, opts) do
+      {:ok, result} ->
+        {:ok,
+         %{
+           status: "success",
+           target: target,
+           suggestions: result.response,
+           focus: Atom.to_string(focus),
+           sources_count: length(result.sources),
+           model_used: result.model
+         }}
+
+      {:error, reason} ->
+        {:error, "RAG suggest failed: #{inspect(reason)}"}
+    end
+  end
+
+  defp rag_suggest_tool(_), do: {:error, "Missing 'target' parameter"}
+
+  defp parse_provider(nil), do: nil
+  defp parse_provider("deepseek_r1"), do: :deepseek_r1
+  defp parse_provider(_), do: nil
 end

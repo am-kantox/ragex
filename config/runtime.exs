@@ -18,3 +18,13 @@ config :ragex, :auto_analyze_dirs, dirs
 # config :ragex, :auto_analyze_dirs, [
 #   "/opt/Proyectos/Ammotion/ragex"
 # ]
+
+# AI Provider API Key Configuration
+# API keys should never be committed to version control
+if config_env() == :prod do
+  # Production: API key is required
+  config :ragex, :ai, api_key: System.fetch_env!("DEEPSEEK_API_KEY")
+else
+  # Dev/test: use env var or default to test-key for testing
+  config :ragex, :ai, api_key: System.get_env("DEEPSEEK_API_KEY", "test-key")
+end

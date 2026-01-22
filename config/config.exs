@@ -66,4 +66,20 @@ config :ragex, :search,
   # Lower threshold for hybrid search (more recall)
   hybrid_threshold: 0.15
 
+# AI Provider Configuration
+config :ragex, :ai,
+  provider: :deepseek_r1,
+  endpoint: "https://api.deepseek.com",
+  model: "deepseek-chat",
+  options: [
+    temperature: 0.7,
+    max_tokens: 2048,
+    stream: false
+  ]
+
+# Feature Flags
+config :ragex, :features,
+  use_metastatic: true,
+  fallback_to_native_analyzers: true
+
 if File.exists?("config/#{Mix.env()}.exs"), do: import_config("#{Mix.env()}.exs")

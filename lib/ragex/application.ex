@@ -4,12 +4,25 @@ defmodule Ragex.Application do
   @moduledoc false
 
   use Application
+  alias Ragex.AI.Config, as: AIConfig
   alias Ragex.Analyzers.Directory
 
   require Logger
 
   @impl true
   def start(_type, _args) do
+    # Validate AI config on startup (only if server is being started)
+    if Application.get_env(:ragex, :start_server, true) do
+      try do
+        AIConfig.validate!()
+        Logger.info("AI configuration validated successfully")
+      rescue
+        e ->
+          Logger.warning("AI configuration validation failed: #{Exception.message(e)}")
+          Logger.warning("AI features will be disabled")
+      end
+    end
+
     children = [
       # Graph store must start before MCP server
       Ragex.Graph.Store,
@@ -19,6 +32,8 @@ defmodule Ragex.Application do
       Ragex.VectorStore,
       # File system watcher for auto-reindex
       Ragex.Watcher,
+      # AI Provider Registry
+      Ragex.AI.Provider.Registry,
       # MCP socket server for persistent connections
       Ragex.MCP.SocketServer,
       # MCP server handles stdio communication (for stdio-based clients)

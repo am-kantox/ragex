@@ -43,6 +43,10 @@ defmodule Ragex.MixProject do
       {:bumblebee, "~> 0.5"},
       {:nx, "~> 0.9"},
       {:exla, "~> 0.9"},
+      # AI Provider
+      {:req, "~> 0.5"},
+      # Metastatic MetaAST
+      {:metastatic, path: "../metastatic"},
       # Doc / Test
       {:credo, "~> 1.5", only: :dev},
       {:dialyxir, "~> 1.1", only: :dev, runtime: false},
