@@ -189,13 +189,23 @@ end
 - **Phase 5E**: Semantic refactoring (rename_function, rename_module via AST)
 - **Phase 8**: Advanced graph algorithms (betweenness centrality, closeness centrality, community detection, visualization)
 - **Phase 10A**: Enhanced refactoring (8 operations: extract_function, inline_function, convert_visibility, rename_parameter, modify_attributes, change_signature, move_function, extract_module, plus MCP integration)
+- **Phase 10C.1**: Diff generation (Myers algorithm, multiple formats)
+- **Phase 10C.2**: Preview mode (dry-run capabilities)
+
+### In Progress 🚧
+
+- **Phase 10C.3-8**: Conflict detection, undo stack, reports, visualization, MCP tools, testing
 
 ### Future Work
 
 - **Phase 6**: Production optimizations (performance tuning, caching strategies)
 - **Phase 7**: Additional language support (Go, Rust, Java)
-- **Phase 10B**: Multi-language refactoring (Erlang, Python, JavaScript/TypeScript)
-- **Phase 10C**: Preview/diff generation, conflict detection, undo/redo stack
+- **Phase 10B (Revised)**: Cross-language refactoring via Metastatic
+  - Leverage existing MetaAST abstraction for multi-language support
+  - Apply Elixir refactoring operations to MetaAST representations
+  - Transform back to language-specific code
+  - Focus on rename operations and simple transformations first
+  - No need for language-specific AST parsers - use metastatic!
 
 ## Common Tasks
 
