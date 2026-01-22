@@ -187,14 +187,14 @@ defmodule Ragex.AI.Usage do
       {:reply, {:error, :rate_limit_minute}, state}
     else
       # Check requests per hour
-      hour_ago = now - 3600
+      hour_ago = now - 3_600
       hour_requests = count_requests_since(provider, hour_ago)
 
       if hour_requests >= limits.max_requests_per_hour do
         {:reply, {:error, :rate_limit_hour}, state}
       else
         # Check tokens per day
-        day_ago = now - 86400
+        day_ago = now - 86_400
         day_tokens = count_tokens_since(provider, day_ago)
 
         if day_tokens >= limits.max_tokens_per_day do
@@ -299,7 +299,7 @@ defmodule Ragex.AI.Usage do
 
   defp cleanup_old_windows do
     # Remove entries older than 24 hours (no longer needed for rate limiting)
-    day_ago = System.system_time(:second) - 86400
+    day_ago = System.system_time(:second) - 86_400
 
     old_entries =
       :ets.select(@window_table, [
@@ -310,7 +310,7 @@ defmodule Ragex.AI.Usage do
       :ets.delete_object(@window_table, {provider, timestamp, tokens})
     end)
 
-    if length(old_entries) > 0 do
+    if match?([_ | _], old_entries) do
       Logger.debug("Cleaned up #{length(old_entries)} old usage window entries")
     end
   end

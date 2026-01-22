@@ -248,12 +248,23 @@ Ragex is an MCP (Model Context Protocol) server that analyzes codebases using co
       ▹ `clear_ai_cache`: Clear cache via MCP  
       ▹ Provider Override: Select provider per-query (openai, anthropic, deepseek_r1, ollama)  
       ▹ Documentation: See [RAG_IMPLEMENTATION_SUMMARY.md](RAG_IMPLEMENTATION_SUMMARY.md) and [STREAMING.md](STREAMING.md)
+
+    ▸ MetaAST-Enhanced Retrieval (Phase 5B - COMPLETE)  
+      ▹ Context-Aware Ranking: Query intent detection (explain, refactor, example, debug)  
+      ▹ Purity Analysis: Boost pure functions, penalize side effects  
+      ▹ Complexity Scoring: Favor simple code for explanations, complex code for refactoring  
+      ▹ Cross-Language Search: Find equivalent constructs across languages via MetaAST  
+      ▹ Query Expansion: Automatic synonym injection and cross-language terms  
+      ▹ Pattern Search: Find all implementations of MetaAST patterns (map, filter, lambda, etc.)  
+      ▹ Hybrid Integration: MetaAST ranking applied to all search strategies  
+      ▹ MCP Tools: `metaast_search`, `cross_language_alternatives`, `expand_query`, `find_metaast_pattern`  
+      ▹ Documentation: See [METAAST_RETRIEVAL.md](METAAST_RETRIEVAL.md)
 </details>
 
 ### Planned Features
 
 - [x] Streaming RAG responses (Phase 5A complete - internal streaming, MCP notifications in Phase 5C)
-- [ ] MetaAST-enhanced retrieval (Phase 5B)
+- [x] MetaAST-enhanced retrieval (Phase 5B complete)
 - [ ] Provider health checks and auto-failover (Phase 5C)
 - [ ] Production optimizations (Phase 6)
 - [ ] Additional language support (Phase 7: Go, Rust, Java)

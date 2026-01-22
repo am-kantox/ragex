@@ -11,6 +11,7 @@ defmodule Mix.Tasks.Ragex.Ai.Cache.Stats do
 
   use Mix.Task
   require Logger
+  alias Ragex.AI.Cache
 
   @shortdoc "Display AI cache statistics"
 
@@ -18,7 +19,7 @@ defmodule Mix.Tasks.Ragex.Ai.Cache.Stats do
   def run(_args) do
     Mix.Task.run("app.start")
 
-    stats = Ragex.AI.Cache.stats()
+    stats = Cache.stats()
 
     IO.puts("\n=== AI Cache Statistics ===\n")
     IO.puts("Enabled: #{stats.enabled}")

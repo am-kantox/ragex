@@ -144,7 +144,7 @@ defmodule Ragex.AI.Cache do
           ttl: ttl,
           utilization: if(max_size > 0, do: size / max_size, else: 0.0),
           hit_rate: calculate_hit_rate(stats_map),
-          # TODO: implement per-operation tracking
+          # [TODO]: implement per-operation tracking
           by_operation: %{}
         })
 
@@ -264,7 +264,7 @@ defmodule Ragex.AI.Cache do
       :ets.delete(@table_name, key)
     end)
 
-    if length(expired_keys) > 0 do
+    if match?([_ | _], expired_keys) do
       Logger.debug("Cleaned up #{length(expired_keys)} expired cache entries")
     end
   end

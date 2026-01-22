@@ -10,6 +10,7 @@ defmodule Ragex.Retrieval.Hybrid do
 
   alias Ragex.Embeddings.Bumblebee
   alias Ragex.Graph.Store
+  alias Ragex.Retrieval.MetaASTRanker
   alias Ragex.VectorStore
 
   @doc """
@@ -28,6 +29,11 @@ defmodule Ragex.Retrieval.Hybrid do
   - `:threshold` - Semantic similarity threshold (default: 0.7)
   - `:node_type` - Filter by entity type
   - `:graph_filter` - Additional graph constraints
+  - `:metaast_ranking` - Enable MetaAST-based ranking boosts (default: true)
+  - `:metaast_opts` - Options for MetaAST ranking:
+    - `:prefer_pure` - Boost pure functions more (default: true)
+    - `:penalize_complex` - Penalize complex code more (default: true)
+    - `:cross_language` - Enable cross-language equivalence search (default: false)
 
   ## Examples
 
@@ -41,6 +47,12 @@ defmodule Ragex.Retrieval.Hybrid do
       Hybrid.search("calculate", 
         strategy: :graph_first,
         graph_filter: %{module: "Math"}
+      )
+
+      # With MetaAST ranking for cross-language results
+      Hybrid.search("map operations",
+        metaast_ranking: true,
+        metaast_opts: [cross_language: true]
       )
   """
   def search(query, opts \\ []) when is_binary(query) do
@@ -124,9 +136,22 @@ defmodule Ragex.Retrieval.Hybrid do
         filtered_results =
           semantic_results
           |> Enum.filter(&matches_graph_filter?(&1, graph_filter))
+
+        # Apply MetaAST ranking if enabled
+        ranked_results =
+          if Keyword.get(opts, :metaast_ranking, true) do
+            metaast_opts =
+              opts
+              |> Keyword.get(:metaast_opts, [])
+              |> Keyword.put(:query, query)
+
+            MetaASTRanker.apply_ranking(filtered_results, metaast_opts)
+          else
+            filtered_results
+          end
           |> Enum.take(limit)
 
-        {:ok, filtered_results}
+        {:ok, ranked_results}
 
       {:error, reason} ->
         {:error, reason}
@@ -146,7 +171,7 @@ defmodule Ragex.Retrieval.Hybrid do
         candidates = get_graph_candidates(graph_filter)
 
         # Get embeddings for candidates and calculate similarity
-        ranked_results =
+        candidate_results =
           candidates
           |> Enum.map(fn {node_type, node_id} ->
             case Store.get_embedding(node_type, node_id) do
@@ -167,7 +192,20 @@ defmodule Ragex.Retrieval.Hybrid do
           end)
           |> Enum.reject(&is_nil/1)
           |> Enum.filter(fn result -> result.score >= threshold end)
-          |> Enum.sort_by(fn result -> result.score end, :desc)
+
+        # Apply MetaAST ranking if enabled
+        ranked_results =
+          if Keyword.get(opts, :metaast_ranking, true) do
+            metaast_opts =
+              opts
+              |> Keyword.get(:metaast_opts, [])
+              |> Keyword.put(:query, query)
+
+            MetaASTRanker.apply_ranking(candidate_results, metaast_opts)
+          else
+            candidate_results
+            |> Enum.sort_by(fn result -> result.score end, :desc)
+          end
           |> Enum.take(limit)
 
         {:ok, ranked_results}
@@ -184,11 +222,25 @@ defmodule Ragex.Retrieval.Hybrid do
     case {semantic_first_search(query, opts), graph_first_search(query, opts)} do
       {{:ok, semantic_results}, {:ok, graph_results}} ->
         # Apply RRF fusion
-        fused_results =
+        pre_fusion_results =
           reciprocal_rank_fusion(
             [semantic_results, graph_results],
-            limit: limit
+            limit: limit * 2
           )
+
+        # Apply MetaAST ranking if enabled
+        fused_results =
+          if Keyword.get(opts, :metaast_ranking, true) do
+            metaast_opts =
+              opts
+              |> Keyword.get(:metaast_opts, [])
+              |> Keyword.put(:query, query)
+
+            MetaASTRanker.apply_ranking(pre_fusion_results, metaast_opts)
+          else
+            pre_fusion_results
+          end
+          |> Enum.take(limit)
 
         {:ok, fused_results}
 

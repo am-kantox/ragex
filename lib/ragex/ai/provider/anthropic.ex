@@ -425,14 +425,9 @@ defmodule Ragex.AI.Provider.Anthropic do
 
       ["event: message_delta", "data: " <> json] ->
         # Extract final usage
-        with {:ok, data} <- Jason.decode(json) do
-          usage = get_in(data, ["usage"])
-
-          if usage do
-            parse_usage_data(usage)
-          else
-            :skip
-          end
+        with {:ok, data} <- Jason.decode(json),
+             usage when not is_nil(usage) <- get_in(data, ["usage"]) do
+          parse_usage_data(usage)
         else
           _ -> :skip
         end

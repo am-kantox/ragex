@@ -88,9 +88,7 @@ defmodule Ragex.RAG.Pipeline do
     with {:ok, retrieval_results} <- retrieve(user_query, opts),
          {:ok, context} <- build_context(retrieval_results, opts),
          {:ok, prompt} <- build_prompt(user_query, context, opts),
-         {:ok, stream} <- stream_generate(:query, prompt, context, retrieval_results, opts) do
-      {:ok, stream}
-    end
+         do: stream_generate(:query, prompt, context, retrieval_results, opts)
   end
 
   @doc """

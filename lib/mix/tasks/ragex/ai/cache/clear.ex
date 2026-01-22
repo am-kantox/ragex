@@ -16,6 +16,7 @@ defmodule Mix.Tasks.Ragex.Ai.Cache.Clear do
 
   use Mix.Task
   require Logger
+  alias Ragex.AI.Cache
 
   @shortdoc "Clear AI cache"
 
@@ -27,12 +28,12 @@ defmodule Mix.Tasks.Ragex.Ai.Cache.Clear do
 
     case Keyword.get(opts, :operation) do
       nil ->
-        :ok = Ragex.AI.Cache.clear()
+        :ok = Cache.clear()
         IO.puts("AI cache cleared successfully")
 
       operation_str ->
         operation = String.to_atom(operation_str)
-        :ok = Ragex.AI.Cache.clear(operation)
+        :ok = Cache.clear(operation)
         IO.puts("AI cache cleared for operation: #{operation}")
     end
   end

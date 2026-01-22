@@ -17,7 +17,7 @@ defmodule Ragex.MCP.Handlers.Tools do
   alias Ragex.Graph.Algorithms
   alias Ragex.Graph.Store
   alias Ragex.RAG.Pipeline
-  alias Ragex.Retrieval.Hybrid
+  alias Ragex.Retrieval.{CrossLanguage, Hybrid, QueryExpansion}
   alias Ragex.VectorStore
   alias Ragex.Watcher
 
@@ -298,6 +298,141 @@ defmodule Ragex.MCP.Handlers.Tools do
               }
             },
             required: ["query"]
+          }
+        },
+        %{
+          name: "metaast_search",
+          description:
+            "Search for semantically equivalent code constructs across languages using MetaAST analysis",
+          inputSchema: %{
+            type: "object",
+            properties: %{
+              source_language: %{
+                type: "string",
+                description: "Source language",
+                enum: ["elixir", "erlang", "python", "javascript"]
+              },
+              source_construct: %{
+                type: "string",
+                description:
+                  "Source construct (e.g., 'Enum.map/2', 'list_comprehension', or MetaAST pattern)"
+              },
+              target_languages: %{
+                type: "array",
+                description: "Target languages to search (empty = all languages)",
+                items: %{
+                  type: "string",
+                  enum: ["elixir", "erlang", "python", "javascript"]
+                },
+                default: []
+              },
+              limit: %{
+                type: "integer",
+                description: "Maximum results per language",
+                default: 5
+              },
+              threshold: %{
+                type: "number",
+                description: "Semantic similarity threshold (0.0-1.0)",
+                default: 0.6
+              },
+              strict_equivalence: %{
+                type: "boolean",
+                description: "Require exact AST match (default: false)",
+                default: false
+              }
+            },
+            required: ["source_language", "source_construct"]
+          }
+        },
+        %{
+          name: "cross_language_alternatives",
+          description: "Suggest cross-language alternatives for a code construct",
+          inputSchema: %{
+            type: "object",
+            properties: %{
+              language: %{
+                type: "string",
+                description: "Source language",
+                enum: ["elixir", "erlang", "python", "javascript"]
+              },
+              code: %{
+                type: "string",
+                description: "Code snippet or construct description"
+              },
+              target_languages: %{
+                type: "array",
+                description: "Languages to generate alternatives for",
+                items: %{
+                  type: "string",
+                  enum: ["elixir", "erlang", "python", "javascript"]
+                },
+                default: []
+              }
+            },
+            required: ["language", "code"]
+          }
+        },
+        %{
+          name: "expand_query",
+          description: "Expand a search query with semantic synonyms and cross-language terms",
+          inputSchema: %{
+            type: "object",
+            properties: %{
+              query: %{
+                type: "string",
+                description: "Original search query"
+              },
+              intent: %{
+                type: "string",
+                description: "Query intent (auto-detected if not specified)",
+                enum: ["explain", "refactor", "example", "debug", "general"]
+              },
+              max_terms: %{
+                type: "integer",
+                description: "Maximum expansion terms to add",
+                default: 5
+              },
+              include_synonyms: %{
+                type: "boolean",
+                description: "Include semantic synonyms",
+                default: true
+              },
+              include_cross_language: %{
+                type: "boolean",
+                description: "Include cross-language terms",
+                default: true
+              }
+            },
+            required: ["query"]
+          }
+        },
+        %{
+          name: "find_metaast_pattern",
+          description: "Find all implementations of a MetaAST pattern across all languages",
+          inputSchema: %{
+            type: "object",
+            properties: %{
+              pattern: %{
+                type: "string",
+                description: "MetaAST pattern (e.g., 'collection_op:map', 'loop:for', 'lambda')"
+              },
+              languages: %{
+                type: "array",
+                description: "Filter by languages (empty = all)",
+                items: %{
+                  type: "string",
+                  enum: ["elixir", "erlang", "python", "javascript"]
+                },
+                default: []
+              },
+              limit: %{
+                type: "integer",
+                description: "Maximum results",
+                default: 20
+              }
+            },
+            required: ["pattern"]
           }
         },
         %{
@@ -874,6 +1009,18 @@ defmodule Ragex.MCP.Handlers.Tools do
 
       "hybrid_search" ->
         hybrid_search_tool(arguments)
+
+      "metaast_search" ->
+        metaast_search_tool(arguments)
+
+      "cross_language_alternatives" ->
+        cross_language_alternatives_tool(arguments)
+
+      "expand_query" ->
+        expand_query_tool(arguments)
+
+      "find_metaast_pattern" ->
+        find_metaast_pattern_tool(arguments)
 
       "edit_file" ->
         edit_file_tool(arguments)
@@ -2460,4 +2607,188 @@ defmodule Ragex.MCP.Handlers.Tools do
        message: "Cache cleared for: #{operation_str}"
      }}
   end
+
+  # MetaAST tool implementations
+
+  defp metaast_search_tool(
+         %{"source_language" => source_lang, "source_construct" => construct} = params
+       ) do
+    source_language = String.to_atom(source_lang)
+    target_languages = parse_language_list(Map.get(params, "target_languages", []))
+    limit = Map.get(params, "limit", 5)
+    threshold = Map.get(params, "threshold", 0.6)
+    strict = Map.get(params, "strict_equivalence", false)
+
+    opts = [
+      limit: limit,
+      threshold: threshold,
+      strict_equivalence: strict
+    ]
+
+    case CrossLanguage.search_equivalent(source_language, construct, target_languages, opts) do
+      {:ok, results} ->
+        formatted_results =
+          Enum.map(results, fn {language, language_results} ->
+            %{
+              language: Atom.to_string(language),
+              matches:
+                Enum.map(language_results, fn result ->
+                  %{
+                    node_id: format_node_id(result.node_id),
+                    score: Float.round(result.score, 4),
+                    code_sample: result[:text] || ""
+                  }
+                end)
+            }
+          end)
+
+        total_matches =
+          Enum.reduce(formatted_results, 0, fn lang, acc -> acc + length(lang.matches) end)
+
+        {:ok,
+         %{
+           status: "success",
+           source_language: source_lang,
+           source_construct: construct,
+           results: formatted_results,
+           total_matches: total_matches
+         }}
+
+      {:error, reason} ->
+        {:error, "MetaAST search failed: #{inspect(reason)}"}
+    end
+  end
+
+  defp metaast_search_tool(_), do: {:error, "Missing required parameters"}
+
+  defp cross_language_alternatives_tool(%{"language" => lang, "code" => code} = params) do
+    language = String.to_atom(lang)
+    target_languages = parse_language_list(Map.get(params, "target_languages", []))
+
+    source = %{
+      language: language,
+      code: code
+    }
+
+    case CrossLanguage.suggest_alternatives(source, target_languages) do
+      {:ok, suggestions} ->
+        {:ok,
+         %{
+           status: "success",
+           source_language: lang,
+           alternatives:
+             Enum.map(suggestions, fn suggestion ->
+               %{
+                 language: Atom.to_string(suggestion.language),
+                 node_id: format_node_id(suggestion.node_id),
+                 score: Float.round(suggestion.score, 4),
+                 code_sample: suggestion.code_sample,
+                 explanation: suggestion.explanation
+               }
+             end),
+           count: length(suggestions)
+         }}
+
+      {:error, reason} ->
+        {:error, "Failed to generate alternatives: #{inspect(reason)}"}
+    end
+  end
+
+  defp cross_language_alternatives_tool(_), do: {:error, "Missing required parameters"}
+
+  defp expand_query_tool(%{"query" => query} = params) do
+    intent =
+      case Map.get(params, "intent") do
+        nil -> nil
+        str -> String.to_atom(str)
+      end
+
+    max_terms = Map.get(params, "max_terms", 5)
+    include_synonyms = Map.get(params, "include_synonyms", true)
+    include_cross_language = Map.get(params, "include_cross_language", true)
+
+    opts = [
+      max_terms: max_terms,
+      include_synonyms: include_synonyms,
+      include_cross_language: include_cross_language
+    ]
+
+    opts = if intent, do: Keyword.put(opts, :intent, intent), else: opts
+
+    expanded_query = QueryExpansion.expand(query, opts)
+    variations = QueryExpansion.suggest_variations(query)
+
+    {:ok,
+     %{
+       status: "success",
+       original_query: query,
+       expanded_query: expanded_query,
+       suggested_variations: variations
+     }}
+  end
+
+  defp expand_query_tool(_), do: {:error, "Missing 'query' parameter"}
+
+  defp find_metaast_pattern_tool(%{"pattern" => pattern_str} = params) do
+    languages = parse_language_list(Map.get(params, "languages", []))
+    limit = Map.get(params, "limit", 20)
+
+    # Parse pattern string (e.g., "collection_op:map" -> {:collection_op, :map, :_, :_})
+    pattern =
+      case String.split(pattern_str, ":") do
+        [tag, op] ->
+          {:"#{tag}", String.to_atom(op), :_, :_}
+
+        [tag] ->
+          case tag do
+            "lambda" -> {:lambda, :_, :_, :_}
+            "conditional" -> {:conditional, :_, :_, :_}
+            _ -> {:"#{tag}", :_, :_, :_}
+          end
+
+        _ ->
+          :_
+      end
+
+    opts = [
+      limit: limit,
+      languages: languages
+    ]
+
+    {:ok, results} = CrossLanguage.find_all_implementations(pattern, opts)
+
+    formatted_results =
+      Enum.map(results, fn result ->
+        %{
+          node_id: format_node_id(result.node_id),
+          language: Atom.to_string(result.language || :unknown),
+          score: Float.round(result.score, 4),
+          code_sample: result[:text] || ""
+        }
+      end)
+
+    # Group by language
+    by_language =
+      formatted_results
+      |> Enum.group_by(& &1.language)
+      |> Enum.map(fn {lang, items} ->
+        %{language: lang, count: length(items), items: items}
+      end)
+
+    {:ok,
+     %{
+       status: "success",
+       pattern: pattern_str,
+       total_matches: length(formatted_results),
+       by_language: by_language
+     }}
+  end
+
+  defp find_metaast_pattern_tool(_), do: {:error, "Missing 'pattern' parameter"}
+
+  defp parse_language_list(lang_list) when is_list(lang_list) do
+    Enum.map(lang_list, &String.to_atom/1)
+  end
+
+  defp parse_language_list(_), do: []
 end

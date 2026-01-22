@@ -16,6 +16,7 @@ defmodule Mix.Tasks.Ragex.Ai.Usage.Stats do
 
   use Mix.Task
   require Logger
+  alias Ragex.AI.Usage
 
   @shortdoc "Display AI usage statistics"
 
@@ -28,7 +29,7 @@ defmodule Mix.Tasks.Ragex.Ai.Usage.Stats do
     case Keyword.get(opts, :provider) do
       nil ->
         # Show all providers
-        stats = Ragex.AI.Usage.get_stats(:all)
+        stats = Usage.get_stats(:all)
 
         IO.puts("\n=== AI Usage Statistics (All Providers) ===\n")
 
@@ -59,7 +60,7 @@ defmodule Mix.Tasks.Ragex.Ai.Usage.Stats do
 
       provider_str ->
         provider = String.to_atom(provider_str)
-        stats = Ragex.AI.Usage.get_stats(provider)
+        stats = Usage.get_stats(provider)
 
         if map_size(stats) == 0 do
           IO.puts("No usage data for provider: #{provider}")
