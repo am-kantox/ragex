@@ -189,23 +189,35 @@ end
 - **Phase 5E**: Semantic refactoring (rename_function, rename_module via AST)
 - **Phase 8**: Advanced graph algorithms (betweenness centrality, closeness centrality, community detection, visualization)
 - **Phase 10A**: Enhanced refactoring (8 operations: extract_function, inline_function, convert_visibility, rename_parameter, modify_attributes, change_signature, move_function, extract_module, plus MCP integration)
-- **Phase 10C.1**: Diff generation (Myers algorithm, multiple formats)
-- **Phase 10C.2**: Preview mode (dry-run capabilities)
+- **Phase 10C**: Preview/Safety features (diff generation, preview mode, conflict detection, undo stack, reports, visualization, MCP tools, comprehensive testing)
+  - 10C.1: Diff generation (Myers algorithm, 4 formats: unified, side-by-side, JSON, HTML)
+  - 10C.2: Preview mode (dry-run capabilities with diffs and stats)
+  - 10C.3: Conflict detection (5 conflict types with severity levels)
+  - 10C.4: Undo stack (persistent history in ~/.ragex/undo, undo/redo support)
+  - 10C.5: Reports (Markdown, JSON, HTML with stats and warnings)
+  - 10C.6: Visualization (Graphviz, D3, ASCII for impact analysis)
+  - 10C.7: MCP tools (preview_refactor, refactor_conflicts, undo_refactor, refactor_history, visualize_impact)
+  - 10C.8: Testing (29 tests covering undo, reports, visualization)
 
 ### In Progress 🚧
 
-- **Phase 10C.3-8**: Conflict detection, undo stack, reports, visualization, MCP tools, testing
+- None currently
 
 ### Future Work
 
 - **Phase 6**: Production optimizations (performance tuning, caching strategies)
 - **Phase 7**: Additional language support (Go, Rust, Java)
-- **Phase 10B (Revised)**: Cross-language refactoring via Metastatic
-  - Leverage existing MetaAST abstraction for multi-language support
-  - Apply Elixir refactoring operations to MetaAST representations
-  - Transform back to language-specific code
-  - Focus on rename operations and simple transformations first
-  - No need for language-specific AST parsers - use metastatic!
+- **Phase 10B**: Cross-language refactoring via Metastatic
+  - **Strategic Shift**: Leverage existing Metastatic library for multi-language AST abstraction
+  - **Approach**: Apply Elixir refactoring operations to MetaAST representations, transform back to target language
+  - **Benefits**: No need for language-specific AST parsers - Metastatic already provides MetaAST for Elixir, Erlang, Python, JavaScript
+  - **Implementation**: 
+    1. Create adapter layer: Elixir refactoring ops → MetaAST transformations
+    2. Use Metastatic to parse source → MetaAST
+    3. Apply transformations to MetaAST
+    4. Use Metastatic to generate target code
+  - **Initial Focus**: Rename operations (rename_function, rename_module across languages)
+  - **Advantages**: Unified refactoring logic, automatic multi-language support, leverages existing battle-tested abstraction
 
 ## Common Tasks
 
