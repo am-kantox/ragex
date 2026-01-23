@@ -137,6 +137,14 @@ end
    - Semantic refactoring (AST-aware)
    - MCP tool integration with progress notifications
 
+8. **Analysis System** (`lib/ragex/analysis/`)
+   - Code duplication detection (AST-based via Metastatic)
+   - Clone detection (Type I-IV: exact, renamed, near-miss, semantic)
+   - Embedding-based similarity search
+   - Dead code detection (graph-based + intraprocedural)
+   - Dependency analysis and coupling metrics
+   - MCP tools for all analysis features
+
 ## Development Practices
 
 ### Testing
@@ -202,10 +210,17 @@ end
   - 10C.6: Visualization (Graphviz, D3, ASCII for impact analysis)
   - 10C.7: MCP tools (preview_refactor, refactor_conflicts, undo_refactor, refactor_history, visualize_impact)
   - 10C.8: Testing (29 tests covering undo, reports, visualization)
+- **Phase 11 Week 2-3**: Code Analysis Features
+  - Week 2 Day 3: Dead code detection via Metastatic integration (interprocedural + intraprocedural)
+  - Week 3 Days 2-3: Code duplication detection (AST-based Type I-IV clones + embedding-based semantic similarity)
+  - Module: `lib/ragex/analysis/duplication.ex` (400 lines)
+  - MCP Tools: `find_duplicates`, `find_similar_code`
+  - Testing: 24 tests, all passing
+  - Documentation: Comprehensive ANALYSIS.md guide
 
 ### In Progress 🚧
 
-- None currently
+- **Phase 11 Week 3 Day 4-5**: Integration tests and final documentation updates
 
 ### Future Work
 
