@@ -170,9 +170,7 @@ defmodule Ragex.Analysis.QualityStoreTest do
 
     test "counts warnings and impure files" do
       :ok =
-        QualityStore.store_metrics(
-          sample_result("lib/file1.ex", warnings: ["High complexity"])
-        )
+        QualityStore.store_metrics(sample_result("lib/file1.ex", warnings: ["High complexity"]))
 
       :ok =
         QualityStore.store_metrics(
@@ -202,7 +200,9 @@ defmodule Ragex.Analysis.QualityStoreTest do
   describe "stats_by_language/0" do
     test "returns stats grouped by language" do
       :ok =
-        QualityStore.store_metrics(sample_result("lib/file1.ex", language: :elixir, cyclomatic: 5))
+        QualityStore.store_metrics(
+          sample_result("lib/file1.ex", language: :elixir, cyclomatic: 5)
+        )
 
       :ok =
         QualityStore.store_metrics(
@@ -210,7 +210,9 @@ defmodule Ragex.Analysis.QualityStoreTest do
         )
 
       :ok =
-        QualityStore.store_metrics(sample_result("src/file.erl", language: :erlang, cyclomatic: 3))
+        QualityStore.store_metrics(
+          sample_result("src/file.erl", language: :erlang, cyclomatic: 3)
+        )
 
       by_lang = QualityStore.stats_by_language()
 

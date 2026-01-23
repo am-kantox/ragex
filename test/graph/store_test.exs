@@ -93,6 +93,120 @@ defmodule Ragex.Graph.StoreTest do
     end
   end
 
+  describe "remove_node/2" do
+    test "removes a node" do
+      Store.add_node(:module, TestModule, %{name: TestModule})
+      assert Store.find_node(:module, TestModule) != nil
+
+      assert :ok = Store.remove_node(:module, TestModule)
+      assert Store.find_node(:module, TestModule) == nil
+    end
+
+    test "removes outgoing edges when node is removed" do
+      from = {:module, TestModule}
+      to = {:function, TestModule, :test, 0}
+
+      Store.add_node(:module, TestModule, %{name: TestModule})
+      Store.add_node(:function, {TestModule, :test, 0}, %{name: :test})
+      Store.add_edge(from, to, :defines)
+
+      # Verify edge exists
+      assert length(Store.get_outgoing_edges(from, :defines)) == 1
+
+      # Remove source node
+      Store.remove_node(:module, TestModule)
+
+      # Edge should be gone
+      assert Store.get_outgoing_edges(from, :defines) == []
+    end
+
+    test "removes incoming edges when node is removed" do
+      from = {:module, TestModule}
+      to = {:function, TestModule, :test, 0}
+
+      Store.add_node(:module, TestModule, %{name: TestModule})
+      Store.add_node(:function, {TestModule, :test, 0}, %{name: :test})
+      Store.add_edge(from, to, :defines)
+
+      # Verify edge exists
+      assert length(Store.get_incoming_edges(to, :defines)) == 1
+
+      # Remove target node
+      Store.remove_node(:function, {TestModule, :test, 0})
+
+      # Edge should be gone
+      assert Store.get_incoming_edges(to, :defines) == []
+    end
+
+    test "removes embedding when node is removed" do
+      embedding = Enum.map(1..384, fn _ -> 0.1 end)
+      Store.store_embedding(:module, TestModule, embedding, "test text")
+
+      # Verify embedding exists
+      assert Store.get_embedding(:module, TestModule) != nil
+
+      # Remove node
+      Store.remove_node(:module, TestModule)
+
+      # Embedding should be gone
+      assert Store.get_embedding(:module, TestModule) == nil
+    end
+
+    test "handles removal of non-existent node gracefully" do
+      assert :ok = Store.remove_node(:module, NonExistentModule)
+    end
+
+    test "removes multiple edges of different types" do
+      node_a = {:module, ModuleA}
+      node_b = {:module, ModuleB}
+      node_c = {:module, ModuleC}
+
+      Store.add_node(:module, ModuleA, %{name: ModuleA})
+      Store.add_node(:module, ModuleB, %{name: ModuleB})
+      Store.add_node(:module, ModuleC, %{name: ModuleC})
+
+      # Add multiple edges from node_a
+      Store.add_edge(node_a, node_b, :imports)
+      Store.add_edge(node_a, node_c, :imports)
+      Store.add_edge(node_a, node_b, :calls)
+
+      # Add edges to node_a
+      Store.add_edge(node_b, node_a, :calls)
+      Store.add_edge(node_c, node_a, :defines)
+
+      # Verify edges exist
+      assert length(Store.get_outgoing_edges(node_a, :imports)) == 2
+      assert length(Store.get_outgoing_edges(node_a, :calls)) == 1
+      assert length(Store.get_incoming_edges(node_a, :calls)) == 1
+      assert length(Store.get_incoming_edges(node_a, :defines)) == 1
+
+      # Remove node_a
+      Store.remove_node(:module, ModuleA)
+
+      # All edges should be gone
+      assert Store.get_outgoing_edges(node_a, :imports) == []
+      assert Store.get_outgoing_edges(node_a, :calls) == []
+      assert Store.get_incoming_edges(node_a, :calls) == []
+      assert Store.get_incoming_edges(node_a, :defines) == []
+
+      # Edges between node_b and node_c should be unaffected
+      # (none exist, so verify node_b->node_c edge creation still works)
+      Store.add_edge(node_b, node_c, :imports)
+      assert length(Store.get_outgoing_edges(node_b, :imports)) == 1
+    end
+
+    test "decrements node count correctly" do
+      Store.add_node(:module, ModuleA, %{name: ModuleA})
+      Store.add_node(:module, ModuleB, %{name: ModuleB})
+
+      assert Store.stats().nodes == 2
+
+      Store.remove_node(:module, ModuleA)
+
+      assert Store.stats().nodes == 1
+    end
+  end
+
   describe "clear/0" do
     test "removes all nodes and edges" do
       Store.add_node(:module, TestModule, %{name: TestModule})

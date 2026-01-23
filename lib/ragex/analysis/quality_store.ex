@@ -230,7 +230,7 @@ defmodule Ragex.Analysis.QualityStore do
   @doc """
   Clears all quality metrics from the graph.
 
-  Useful for testing or re-analysis.
+  Removes only quality_metrics nodes, leaving other graph data intact.
 
   ## Examples
 
@@ -238,10 +238,12 @@ defmodule Ragex.Analysis.QualityStore do
   """
   @spec clear_all() :: :ok
   def clear_all do
-    # Since Store doesn't have a remove_node API, we must clear everything
-    # This will remove all graph nodes, not just quality metrics
-    # In a real implementation, we might want a separate ETS table for quality metrics
-    Store.clear()
+    # Remove all quality metrics nodes selectively
+    Store.list_nodes(@quality_metrics_type, :infinity)
+    |> Enum.each(fn %{id: node_id} ->
+      Store.remove_node(@quality_metrics_type, node_id)
+    end)
+
     :ok
   end
 

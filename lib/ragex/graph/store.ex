@@ -149,6 +149,22 @@ defmodule Ragex.Graph.Store do
   end
 
   @doc """
+  Removes a node from the graph.
+
+  Also removes all edges connected to this node (both incoming and outgoing)
+  and any embedding associated with the node.
+
+  Returns `:ok` if successful, `{:error, :timeout}` on timeout.
+  """
+  def remove_node(node_type, node_id) do
+    GenServer.call(__MODULE__, {:remove_node, node_type, node_id}, @timeout)
+  catch
+    :exit,
+    {:timeout, {GenServer, :call, [_pid, {:remove_node, ^node_type, ^node_id}, @timeout]}} ->
+      {:error, :timeout}
+  end
+
+  @doc """
   Clears all data from the graph.
   """
   def clear do
@@ -272,6 +288,45 @@ defmodule Ragex.Graph.Store do
   def handle_call({:store_embedding, node_type, node_id, embedding, text}, _from, state) do
     key = {node_type, node_id}
     :ets.insert(@embeddings_table, {key, embedding, text})
+    {:reply, :ok, state}
+  end
+
+  @impl true
+  def handle_call({:remove_node, node_type, node_id}, _from, state) do
+    node_key = {node_type, node_id}
+
+    # Build edge identifier: edges use tuples like {:module, id} or {:function, mod, name, arity}
+    # Node storage uses {node_type, node_id}, but edges flatten function tuples
+    edge_identifier =
+      case {node_type, node_id} do
+        {:function, {mod, name, arity}} -> {:function, mod, name, arity}
+        {type, id} -> {type, id}
+      end
+
+    # Remove the node itself
+    :ets.delete(@nodes_table, node_key)
+
+    # Remove all outgoing edges from this node
+    # Pattern: {{edge_identifier, to_node, edge_type}, metadata}
+    outgoing_pattern = {{edge_identifier, :"$1", :"$2"}, :"$3"}
+    outgoing_matches = :ets.match(@edges_table, outgoing_pattern)
+
+    Enum.each(outgoing_matches, fn [to_node, edge_type, _metadata] ->
+      :ets.delete(@edges_table, {edge_identifier, to_node, edge_type})
+    end)
+
+    # Remove all incoming edges to this node
+    # Pattern: {{from_node, edge_identifier, edge_type}, metadata}
+    incoming_pattern = {{:"$1", edge_identifier, :"$2"}, :"$3"}
+    incoming_matches = :ets.match(@edges_table, incoming_pattern)
+
+    Enum.each(incoming_matches, fn [from_node, edge_type, _metadata] ->
+      :ets.delete(@edges_table, {from_node, edge_identifier, edge_type})
+    end)
+
+    # Remove embedding if exists
+    :ets.delete(@embeddings_table, node_key)
+
     {:reply, :ok, state}
   end
 

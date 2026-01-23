@@ -114,7 +114,8 @@ defmodule Ragex.Analysis.MetastaticBridgeTest do
 
       case result do
         {:error, _reason} -> assert true
-        {:ok, _} -> assert true  # Metastatic may wrap syntax errors in AST
+        # Metastatic may wrap syntax errors in AST
+        {:ok, _} -> assert true
       end
     end
   end
