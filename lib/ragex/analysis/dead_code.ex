@@ -2,16 +2,27 @@ defmodule Ragex.Analysis.DeadCode do
   @moduledoc """
   Dead code detection for identifying unused functions and code.
 
+  Provides two complementary approaches:
+
+  ## Interprocedural Analysis (Graph-based)
   Analyzes the knowledge graph to find:
   - Unused public functions (exported but never called externally)
   - Unused private functions (never called within module)
   - Functions with low confidence of being dead (potential entry points, callbacks)
 
+  ## Intraprocedural Analysis (AST-based via Metastatic)
+  Analyzes individual files for:
+  - Unreachable code after early returns
+  - Constant conditionals with unreachable branches
+  - Other dead code patterns within function bodies
+
   Provides confidence scores to help distinguish between truly dead code and
   potential entry points (callbacks, GenServer handlers, etc.).
   """
 
-  alias Ragex.Graph.Store
+  alias Metastatic.Analysis.DeadCode, as: MetaDeadCode
+  alias Ragex.{Analysis.MetastaticBridge, Graph.Store}
+
   require Logger
 
   @type function_ref :: {:function, module(), atom(), non_neg_integer()}
@@ -201,6 +212,91 @@ defmodule Ragex.Analysis.DeadCode do
       all = (exports ++ private) |> Enum.sort_by(& &1.confidence, :desc)
       {:ok, all}
     end
+  end
+
+  @doc """
+  Analyzes a file for intraprocedural dead code patterns.
+
+  Uses Metastatic's AST-level analysis to detect:
+  - Unreachable code after early returns
+  - Constant conditionals (if true/false) with unreachable branches
+  - Other dead code patterns within function bodies
+
+  This is complementary to the interprocedural analysis (`find_unused_exports/1`, etc.)
+  which detects unused functions based on the call graph.
+
+  ## Parameters
+  - `file_path` - Path to the file to analyze
+  - `opts` - Keyword list of options
+    - `:min_confidence` - Minimum confidence level (`:high`, `:medium`, `:low`, default: `:low`)
+
+  ## Returns
+  - `{:ok, result}` - Metastatic.Analysis.DeadCode.Result struct
+  - `{:error, reason}` - Error if analysis fails
+
+  ## Examples
+
+      iex> {:ok, result} = analyze_file("lib/my_module.ex")
+      iex> result.has_dead_code?
+      true
+  """
+  @spec analyze_file(String.t(), keyword()) ::
+          {:ok, Metastatic.Analysis.DeadCode.Result.t()} | {:error, term()}
+  def analyze_file(file_path, opts \\ []) do
+    min_confidence = Keyword.get(opts, :min_confidence, :low)
+
+    case MetastaticBridge.parse_file(file_path) do
+      {:ok, document} ->
+        # Use Metastatic's dead code analysis
+        MetaDeadCode.analyze(document, min_confidence: min_confidence)
+
+      {:error, reason} ->
+        Logger.warning("Failed to parse file #{file_path}: #{inspect(reason)}")
+        {:error, reason}
+    end
+  end
+
+  @doc """
+  Analyzes multiple files for intraprocedural dead code patterns.
+
+  Batch version of `analyze_file/2` that processes multiple files in parallel.
+
+  ## Parameters
+  - `file_paths` - List of file paths to analyze
+  - `opts` - Keyword list of options (same as `analyze_file/2`)
+
+  ## Returns
+  - `{:ok, results_map}` - Map of file_path => result
+  - `{:error, reason}` - Error if analysis fails
+
+  ## Examples
+
+      iex> {:ok, results} = analyze_files(["lib/a.ex", "lib/b.ex"])
+      iex> is_map(results)
+      true
+  """
+  @spec analyze_files([String.t()], keyword()) :: {:ok, %{String.t() => any()}} | {:error, term()}
+  def analyze_files(file_paths, opts \\ []) when is_list(file_paths) do
+    results =
+      file_paths
+      |> Task.async_stream(
+        fn path ->
+          case analyze_file(path, opts) do
+            {:ok, result} -> {path, result}
+            {:error, reason} -> {path, {:error, reason}}
+          end
+        end,
+        max_concurrency: System.schedulers_online() * 2,
+        timeout: 30_000
+      )
+      |> Enum.map(fn {:ok, result} -> result end)
+      |> Map.new()
+
+    {:ok, results}
+  rescue
+    e ->
+      Logger.error("Failed to analyze files: #{inspect(e)}")
+      {:error, {:analysis_failed, Exception.message(e)}}
   end
 
   @doc """

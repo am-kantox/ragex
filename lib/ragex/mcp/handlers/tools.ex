@@ -1314,6 +1314,33 @@ defmodule Ragex.MCP.Handlers.Tools do
           }
         },
         %{
+          name: "analyze_dead_code_patterns",
+          description:
+            "Analyze files for intraprocedural dead code patterns (unreachable code, constant conditionals) using AST analysis - complements find_dead_code which finds unused functions",
+          inputSchema: %{
+            type: "object",
+            properties: %{
+              path: %{
+                type: "string",
+                description: "File path or directory to analyze"
+              },
+              min_confidence: %{
+                type: "string",
+                description: "Minimum confidence level for reporting",
+                enum: ["low", "medium", "high"],
+                default: "low"
+              },
+              format: %{
+                type: "string",
+                description: "Output format",
+                enum: ["summary", "detailed", "json"],
+                default: "summary"
+              }
+            },
+            required: ["path"]
+          }
+        },
+        %{
           name: "coupling_report",
           description:
             "Generate coupling metrics report - shows afferent/efferent coupling and instability for all modules",
@@ -1495,6 +1522,9 @@ defmodule Ragex.MCP.Handlers.Tools do
 
       "find_dead_code" ->
         find_dead_code_tool(arguments)
+
+      "analyze_dead_code_patterns" ->
+        analyze_dead_code_patterns_tool(arguments)
 
       "coupling_report" ->
         coupling_report_tool(arguments)
@@ -4421,6 +4451,49 @@ defmodule Ragex.MCP.Handlers.Tools do
     end
   end
 
+  defp analyze_dead_code_patterns_tool(%{"path" => path} = params) do
+    min_confidence_str = Map.get(params, "min_confidence", "low")
+    format = Map.get(params, "format", "summary")
+
+    min_confidence = String.to_atom(min_confidence_str)
+    opts = [min_confidence: min_confidence]
+
+    # Check if path is a file or directory
+    cond do
+      File.regular?(path) ->
+        # Single file analysis
+        case DeadCode.analyze_file(path, opts) do
+          {:ok, result} ->
+            format_dead_code_patterns_result(path, result, format)
+
+          {:error, reason} ->
+            {:error, "Failed to analyze file: #{inspect(reason)}"}
+        end
+
+      File.dir?(path) ->
+        # Directory analysis - find all supported files
+        case find_supported_files(path) do
+          [] ->
+            {:error, "No supported files found in directory: #{path}"}
+
+          files ->
+            case DeadCode.analyze_files(files, opts) do
+              {:ok, results} ->
+                format_dead_code_patterns_results(results, format)
+
+              {:error, reason} ->
+                {:error, "Failed to analyze files: #{inspect(reason)}"}
+            end
+        end
+
+      true ->
+        {:error, "Path not found or not accessible: #{path}"}
+    end
+  end
+
+  defp analyze_dead_code_patterns_tool(_),
+    do: {:error, "Invalid parameters for analyze_dead_code_patterns"}
+
   defp coupling_report_tool(params) do
     format = Map.get(params, "format", "text")
     sort_by_str = Map.get(params, "sort_by", "instability")
@@ -4533,6 +4606,165 @@ defmodule Ragex.MCP.Handlers.Tools do
   defp format_cycle_entity({:function, module, name, arity}), do: "#{module}.#{name}/#{arity}"
   defp format_cycle_entity(module) when is_atom(module), do: inspect(module)
   defp format_cycle_entity(other), do: inspect(other)
+
+  defp format_dead_code_patterns_result(path, result, "json") do
+    {:ok,
+     %{
+       status: "success",
+       path: path,
+       has_dead_code: result.has_dead_code?,
+       total_dead_statements: result.total_dead_statements,
+       by_type: result.by_type,
+       locations: result.dead_locations
+     }}
+  end
+
+  defp format_dead_code_patterns_result(path, result, "detailed") do
+    locations_formatted =
+      Enum.map(result.dead_locations, fn loc ->
+        %{
+          type: loc.type,
+          reason: loc.reason,
+          confidence: loc.confidence,
+          suggestion: loc.suggestion
+        }
+      end)
+
+    content = """
+    Dead Code Patterns Analysis
+    ==========================
+    File: #{path}
+    Has Dead Code: #{result.has_dead_code?}
+    Total Dead Statements: #{result.total_dead_statements}
+
+    #{if result.has_dead_code?, do: "Dead Code Locations:", else: "No dead code found."}
+    #{if result.has_dead_code?, do: Enum.map_join(result.dead_locations, "\n", fn loc -> "  - #{loc.type}: #{loc.reason}" end), else: ""}
+    """
+
+    {:ok,
+     %{
+       status: "success",
+       path: path,
+       has_dead_code: result.has_dead_code?,
+       total_dead_statements: result.total_dead_statements,
+       locations: locations_formatted,
+       summary: content
+     }}
+  end
+
+  defp format_dead_code_patterns_result(path, result, "summary") do
+    content = """
+    Dead Code Patterns: #{path}
+    ----------------------------
+    Status: #{if result.has_dead_code?, do: "Dead code found", else: "Clean"}
+    Dead Statements: #{result.total_dead_statements}
+    #{if map_size(result.by_type) > 0, do: "Types: " <> Enum.map_join(result.by_type, ", ", fn {type, count} -> "#{type}(#{count})" end), else: ""}
+    """
+
+    {:ok,
+     %{
+       status: "success",
+       path: path,
+       has_dead_code: result.has_dead_code?,
+       total_dead_statements: result.total_dead_statements,
+       summary: String.trim(content)
+     }}
+  end
+
+  defp format_dead_code_patterns_results(results, "json") do
+    total_files = map_size(results)
+    files_with_issues = Enum.count(results, fn {_, r} -> match?(%{has_dead_code?: true}, r) end)
+
+    total_dead =
+      Enum.sum(
+        Enum.map(results, fn
+          {_, %{total_dead_statements: count}} -> count
+          {_, _} -> 0
+        end)
+      )
+
+    files_data =
+      Enum.map(results, fn {path, result} ->
+        case result do
+          %{has_dead_code?: _} = r ->
+            %{
+              path: path,
+              has_dead_code: r.has_dead_code?,
+              total_dead_statements: r.total_dead_statements,
+              by_type: r.by_type
+            }
+
+          {:error, reason} ->
+            %{path: path, error: inspect(reason)}
+        end
+      end)
+
+    {:ok,
+     %{
+       status: "success",
+       total_files: total_files,
+       files_with_issues: files_with_issues,
+       total_dead_statements: total_dead,
+       files: files_data
+     }}
+  end
+
+  defp format_dead_code_patterns_results(results, format)
+       when format in ["summary", "detailed"] do
+    total_files = map_size(results)
+    files_with_issues = Enum.count(results, fn {_, r} -> match?(%{has_dead_code?: true}, r) end)
+
+    total_dead =
+      Enum.sum(
+        Enum.map(results, fn
+          {_, %{total_dead_statements: count}} -> count
+          {_, _} -> 0
+        end)
+      )
+
+    files_summary =
+      results
+      |> Enum.filter(fn {_, r} -> match?(%{has_dead_code?: true}, r) end)
+      |> Enum.map_join("\n", fn {path, result} ->
+        types_str =
+          if map_size(result.by_type) > 0 do
+            Enum.map_join(result.by_type, ", ", fn {type, count} -> "#{type}(#{count})" end)
+          else
+            "none"
+          end
+
+        "  - #{path}: #{result.total_dead_statements} statements [#{types_str}]"
+      end)
+
+    content = """
+    Dead Code Patterns Analysis Summary
+    ==================================
+    Total Files Analyzed: #{total_files}
+    Files with Dead Code: #{files_with_issues}
+    Total Dead Statements: #{total_dead}
+
+    #{if files_with_issues > 0, do: "Files with Issues:\n" <> files_summary, else: "No dead code found in any files."}
+    """
+
+    {:ok,
+     %{
+       status: "success",
+       total_files: total_files,
+       files_with_issues: files_with_issues,
+       total_dead_statements: total_dead,
+       summary: String.trim(content)
+     }}
+  end
+
+  defp find_supported_files(dir) do
+    # Extensions supported by Metastatic
+    extensions = [".ex", ".exs", ".erl", ".hrl", ".py", ".rb", ".hs"]
+
+    Path.wildcard(Path.join(dir, "**/*"))
+    |> Enum.filter(fn path ->
+      File.regular?(path) && Enum.any?(extensions, fn ext -> String.ends_with?(path, ext) end)
+    end)
+  end
 
   defp format_dead_code_summary(dead_functions, scope) do
     total = length(dead_functions)

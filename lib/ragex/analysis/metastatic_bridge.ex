@@ -73,6 +73,37 @@ defmodule Ragex.Analysis.MetastaticBridge do
   def supported_metrics, do: @supported_metrics
 
   @doc """
+  Parses a file and returns a Metastatic Document.
+
+  This function is useful for accessing Metastatic's low-level analysis
+  capabilities directly, such as dead code detection.
+
+  ## Options
+
+  - `:language` - Explicit language (default: auto-detect)
+
+  ## Examples
+
+      {:ok, doc} = MetastaticBridge.parse_file("lib/my_module.ex")
+      Metastatic.Analysis.DeadCode.analyze(doc)
+  """
+  @spec parse_file(path :: String.t(), opts :: keyword()) ::
+          {:ok, Document.t()} | {:error, term()}
+  def parse_file(path, opts \\ []) do
+    language = Keyword.get(opts, :language, detect_language(path))
+
+    with {:ok, content} <- File.read(path),
+         {:ok, adapter} <- get_adapter(language),
+         {:ok, doc} <- parse_document(adapter, content, language) do
+      {:ok, doc}
+    else
+      {:error, reason} = error ->
+        Logger.warning("Failed to parse #{path}: #{inspect(reason)}")
+        error
+    end
+  end
+
+  @doc """
   Analyzes a single file for code quality metrics.
 
   Delegates to Metastatic for all analysis operations.
