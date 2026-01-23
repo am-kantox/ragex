@@ -215,6 +215,81 @@ defmodule Ragex.Analysis.DeadCode do
   end
 
   @doc """
+  Finds unused functions within a specific module.
+
+  Analyzes all functions (public and private) in the specified module to identify
+  potentially dead code. This is useful for focused refactoring of a single module.
+
+  ## Parameters
+  - `module`: Module name atom
+  - `opts`: Keyword list of options
+    - `:min_confidence` - Minimum confidence threshold (default: 0.5)
+    - `:include_callbacks` - Include potential callbacks (default: false)
+    - `:visibility` - Filter by `:public`, `:private`, or `:all` (default: `:all`)
+
+  ## Returns
+  - `{:ok, [dead_function]}` - List of unused functions in the module
+  - `{:error, reason}` - Error if module not found or analysis fails
+
+  ## Examples
+
+      # Find all dead code in MyModule
+      {:ok, dead} = find_in_module(MyModule)
+
+      # Find only dead private functions with high confidence
+      {:ok, dead_private} = find_in_module(MyModule, visibility: :private, min_confidence: 0.8)
+
+      # Include potential callbacks
+      {:ok, all} = find_in_module(MyModule, include_callbacks: true, min_confidence: 0.3)
+  """
+  @spec find_in_module(module(), keyword()) :: {:ok, [dead_function()]} | {:error, term()}
+  def find_in_module(module, opts \\ []) do
+    min_confidence = Keyword.get(opts, :min_confidence, 0.5)
+    include_callbacks = Keyword.get(opts, :include_callbacks, false)
+    visibility_filter = Keyword.get(opts, :visibility, :all)
+
+    # Verify module exists
+    case Store.find_node(:module, module) do
+      nil ->
+        {:error, {:module_not_found, module}}
+
+      _node ->
+        try do
+          # Get all functions in the module
+          functions =
+            Store.list_nodes(:function, :infinity)
+            |> Enum.filter(fn %{id: {mod, _name, _arity}} -> mod == module end)
+
+          # Filter by visibility if specified
+          functions =
+            case visibility_filter do
+              :public -> Enum.filter(functions, &public_function?/1)
+              :private -> Enum.filter(functions, &private_function?/1)
+              :all -> functions
+              _ -> functions
+            end
+
+          # Analyze each function
+          dead_functions =
+            functions
+            |> Enum.map(&analyze_function/1)
+            |> Enum.filter(fn result ->
+              result != nil &&
+                (include_callbacks || result.confidence >= min_confidence) &&
+                result.confidence >= min_confidence
+            end)
+            |> Enum.sort_by(& &1.confidence, :desc)
+
+          {:ok, dead_functions}
+        rescue
+          e ->
+            Logger.error("Failed to find dead code in module #{module}: #{inspect(e)}")
+            {:error, {:analysis_failed, Exception.message(e)}}
+        end
+    end
+  end
+
+  @doc """
   Analyzes a file for intraprocedural dead code patterns.
 
   Uses Metastatic's AST-level analysis to detect:

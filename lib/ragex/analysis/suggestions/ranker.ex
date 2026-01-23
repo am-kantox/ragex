@@ -61,16 +61,16 @@ defmodule Ragex.Analysis.Suggestions.Ranker do
     benefit = normalize_score(suggestion[:benefit_score] || 0.5)
     confidence = normalize_score(suggestion[:confidence] || 0.5)
     effort = normalize_score(suggestion[:effort_score] || 0.5)
-    
+
     impact_score = calculate_impact_score(suggestion[:impact])
     risk_score = extract_risk_score(suggestion[:impact])
 
     priority_score =
-      (benefit * @benefit_weight) +
-      (impact_score * @impact_weight) -
-      (risk_score * @risk_weight) -
-      (effort * @effort_weight) +
-      (confidence * @confidence_weight)
+      benefit * @benefit_weight +
+        impact_score * @impact_weight -
+        risk_score * @risk_weight -
+        effort * @effort_weight +
+        confidence * @confidence_weight
 
     # Clamp to [0, 1] range
     priority_score = max(0.0, min(1.0, priority_score))
@@ -149,11 +149,11 @@ defmodule Ragex.Analysis.Suggestions.Ranker do
 
   defp calculate_impact_score(impact) when is_map(impact) do
     affected_files = impact[:affected_files] || 1
-    
+
     # More affected files = higher impact (but with diminishing returns)
     # Use logarithmic scale to prevent huge numbers from dominating
     base_impact = :math.log(affected_files + 1) / :math.log(10 + 1)
-    
+
     # Cap at 1.0
     Float.round(min(base_impact, 1.0), 2)
   end
@@ -189,7 +189,7 @@ defmodule Ragex.Analysis.Suggestions.Ranker do
     - Risk: #{Float.round(risk_score, 2)} × #{@risk_weight} = -#{Float.round(risk_score * @risk_weight, 2)}
     - Effort: #{Float.round(effort, 2)} × #{@effort_weight} = -#{Float.round(effort * @effort_weight, 2)}
     - Confidence: #{Float.round(confidence, 2)} × #{@confidence_weight} = #{Float.round(confidence * @confidence_weight, 2)}
-    
+
     Total Score: #{suggestion[:priority_score]}
     Priority Level: #{suggestion[:priority]}
     ROI: #{calculate_roi(suggestion)}
@@ -210,16 +210,20 @@ defmodule Ragex.Analysis.Suggestions.Ranker do
 
     adjustment =
       case pattern do
-        :remove_dead_code -> 0.1  # Boost dead code removal (easy wins)
-        :simplify_complexity -> 0.05  # Slight boost for complexity
-        :reduce_coupling -> 0.0  # No adjustment
-        :split_module -> -0.05  # Slight penalty (high effort)
+        # Boost dead code removal (easy wins)
+        :remove_dead_code -> 0.1
+        # Slight boost for complexity
+        :simplify_complexity -> 0.05
+        # No adjustment
+        :reduce_coupling -> 0.0
+        # Slight penalty (high effort)
+        :split_module -> -0.05
         _ -> 0.0
       end
 
     adjusted_score = max(0.0, min(1.0, base_score + adjustment))
     adjusted_score = Float.round(adjusted_score, 2)
-    
+
     new_priority = classify_priority(adjusted_score)
 
     suggestion
@@ -275,23 +279,27 @@ defmodule Ragex.Analysis.Suggestions.Ranker do
       |> Enum.into(%{})
 
     average_score =
-      if length(suggestions) > 0 do
-        total = Enum.reduce(suggestions, 0.0, fn s, acc -> acc + (s.priority_score || 0.0) end)
-        Float.round(total / length(suggestions), 2)
-      else
-        0.0
+      case suggestions do
+        [_ | _] ->
+          total = Enum.reduce(suggestions, 0.0, fn s, acc -> acc + (s.priority_score || 0.0) end)
+          Float.round(total / length(suggestions), 2)
+
+        _ ->
+          0.0
       end
 
     average_roi =
-      if length(suggestions) > 0 do
-        total = Enum.reduce(suggestions, 0.0, fn s, acc -> acc + calculate_roi(s) end)
-        Float.round(total / length(suggestions), 2)
-      else
-        0.0
+      case suggestions do
+        [_ | _] ->
+          total = Enum.reduce(suggestions, 0.0, fn s, acc -> acc + calculate_roi(s) end)
+          Float.round(total / length(suggestions), 2)
+
+        _ ->
+          0.0
       end
 
     high_priority_count =
-      (Map.get(by_priority, :critical, 0) + Map.get(by_priority, :high, 0))
+      Map.get(by_priority, :critical, 0) + Map.get(by_priority, :high, 0)
 
     %{
       total: length(suggestions),

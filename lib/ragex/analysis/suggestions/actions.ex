@@ -533,12 +533,10 @@ defmodule Ragex.Analysis.Suggestions.Actions do
   """
   def format_plan(plan) do
     steps_text =
-      plan[:steps]
-      |> Enum.map(fn step ->
+      Enum.map_join(plan[:steps], "\n", fn step ->
         tool_text = if step[:tool], do: " [#{step[:tool]}]", else: ""
         "  #{step[:order]}. #{step[:action]}#{tool_text} (#{step[:estimated_time]})"
       end)
-      |> Enum.join("\n")
 
     """
     Action Plan for #{plan[:pattern]} (#{plan[:total_steps]} steps)
@@ -548,10 +546,10 @@ defmodule Ragex.Analysis.Suggestions.Actions do
     #{steps_text}
 
     Validation:
-    #{Enum.map(plan[:validation], fn v -> "  - #{v}" end) |> Enum.join("\n")}
+    #{Enum.map_join(plan[:validation], "\n", fn v -> "  - #{v}" end)}
 
     Rollback Options:
-    #{Enum.map(plan[:rollback], fn r -> "  - #{r}" end) |> Enum.join("\n")}
+    #{Enum.map_join(plan[:rollback], "\n", fn r -> "  - #{r}" end)}
     """
   end
 end

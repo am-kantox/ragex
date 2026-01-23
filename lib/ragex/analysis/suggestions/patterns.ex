@@ -23,7 +23,6 @@ defmodule Ragex.Analysis.Suggestions.Patterns do
   require Logger
 
   @complexity_threshold_high 15
-  @complexity_threshold_medium 10
   @loc_threshold_long 50
   @loc_threshold_medium 30
   @module_function_count_threshold 30
@@ -147,7 +146,7 @@ defmodule Ragex.Analysis.Suggestions.Patterns do
     duplication = data.duplication
 
     case duplication do
-      %{clones: clones} when is_list(clones) and length(clones) > 0 ->
+      %{clones: [_ | _] = clones} ->
         duplicate_suggestions =
           clones
           |> Enum.filter(fn clone ->
@@ -342,7 +341,7 @@ defmodule Ragex.Analysis.Suggestions.Patterns do
     dead_code = data.dead_code
 
     case dead_code do
-      %{dead_functions: functions} when is_list(functions) and length(functions) > 0 ->
+      %{dead_functions: [_ | _] = functions} ->
         functions
         |> Enum.filter(fn dead -> dead.confidence >= 0.7 end)
         |> Enum.map(&build_dead_code_suggestion/1)
@@ -397,7 +396,7 @@ defmodule Ragex.Analysis.Suggestions.Patterns do
     dependencies = data.dependencies
 
     case dependencies do
-      %{circular: circular} when is_list(circular) and length(circular) > 0 ->
+      %{circular: [_ | _] = _circular} ->
         suggestion = build_coupling_suggestion(data, :circular)
         [suggestion | acc]
 

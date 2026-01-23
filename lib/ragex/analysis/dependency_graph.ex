@@ -78,6 +78,105 @@ defmodule Ragex.Analysis.DependencyGraph do
     end
   end
 
+  # Module Analysis
+
+  @doc """
+  Analyzes a module comprehensively.
+
+  Provides complete dependency analysis for a single module including:
+  - Coupling metrics (afferent, efferent, instability)
+  - Direct dependencies and dependents
+  - Circular dependency involvement
+  - God module status
+  - Function count and complexity indicators
+
+  ## Parameters
+  - `module`: Module name atom
+  - `opts`: Keyword list of options
+    - `:include_transitive` - Include transitive dependencies (default: false)
+    - `:include_functions` - Include function list (default: false)
+
+  ## Returns
+  - `{:ok, analysis}` - Comprehensive module analysis map
+  - `{:error, reason}` - Error if module not found or analysis fails
+
+  ## Analysis Map Structure
+  ```elixir
+  %{
+    module: ModuleName,
+    exists: true,
+    coupling: %{afferent: 5, efferent: 3, instability: 0.375},
+    dependencies: [ModuleA, ModuleB],
+    dependents: [ModuleC, ModuleD],
+    function_count: 12,
+    in_cycles: [[ModuleA, ModuleB, ModuleName]],
+    is_god_module: false,
+    functions: [...] # if include_functions: true
+  }
+  ```
+
+  ## Examples
+
+      {:ok, analysis} = analyze_module(MyModule)
+      {:ok, analysis} = analyze_module(MyModule, include_transitive: true, include_functions: true)
+  """
+  @spec analyze_module(module_name(), keyword()) :: {:ok, map()} | {:error, term()}
+  def analyze_module(module, opts \\ []) do
+    include_transitive = Keyword.get(opts, :include_transitive, false)
+    include_functions = Keyword.get(opts, :include_functions, false)
+
+    case Store.find_node(:module, module) do
+      nil ->
+        {:error, {:module_not_found, module}}
+
+      _node ->
+        try do
+          # Get coupling metrics
+          {:ok, coupling} = coupling_metrics(module, include_transitive: include_transitive)
+
+          # Get direct dependencies and dependents
+          dependencies = get_direct_module_dependencies(module)
+          dependents = get_direct_module_dependents(module)
+
+          # Get function information
+          functions = get_module_functions(module)
+          function_count = length(functions)
+
+          # Check if in any cycles
+          {:ok, all_cycles} = find_cycles(scope: :module)
+          in_cycles = Enum.filter(all_cycles, fn cycle -> module in cycle end)
+
+          # Check if God module (threshold: 15)
+          is_god_module = coupling.afferent + coupling.efferent >= 15
+
+          analysis = %{
+            module: module,
+            exists: true,
+            coupling: coupling,
+            dependencies: dependencies,
+            dependents: dependents,
+            function_count: function_count,
+            in_cycles: in_cycles,
+            is_god_module: is_god_module,
+            transitive: include_transitive
+          }
+
+          analysis =
+            if include_functions do
+              Map.put(analysis, :functions, format_functions(functions))
+            else
+              analysis
+            end
+
+          {:ok, analysis}
+        rescue
+          e ->
+            Logger.error("Failed to analyze module #{module}: #{inspect(e)}")
+            {:error, {:analysis_failed, Exception.message(e)}}
+        end
+    end
+  end
+
   # Coupling Metrics
 
   @doc """
@@ -653,6 +752,53 @@ defmodule Ragex.Analysis.DependencyGraph do
     Store.list_nodes(:function, :infinity)
     |> Enum.filter(fn %{id: {mod, _name, _arity}} -> mod == module end)
     |> Enum.map(fn %{id: {mod, name, arity}} -> {:function, mod, name, arity} end)
+  end
+
+  # Get direct module dependencies (modules this module depends on)
+  defp get_direct_module_dependencies(module) do
+    # Check imports from this module
+    import_deps =
+      Store.get_outgoing_edges({:module, module}, :imports)
+      |> Enum.map(fn %{to: {:module, target}} -> target end)
+
+    # Check calls from functions in this module to other modules
+    call_deps =
+      get_module_functions(module)
+      |> Enum.flat_map(fn func ->
+        Store.get_outgoing_edges(func, :calls)
+      end)
+      |> Enum.map(fn %{to: {:function, target_module, _, _}} -> target_module end)
+      |> Enum.reject(&(&1 == module))
+
+    (import_deps ++ call_deps) |> Enum.uniq() |> Enum.sort()
+  end
+
+  # Get direct module dependents (modules that depend on this module)
+  defp get_direct_module_dependents(module) do
+    # Check imports to this module
+    import_dependents =
+      Store.get_incoming_edges({:module, module}, :imports)
+      |> Enum.map(fn %{from: {:module, source}} -> source end)
+
+    # Check calls to functions in this module from other modules
+    call_dependents =
+      get_module_functions(module)
+      |> Enum.flat_map(fn func ->
+        Store.get_incoming_edges(func, :calls)
+      end)
+      |> Enum.map(fn %{from: {:function, source_module, _, _}} -> source_module end)
+      |> Enum.reject(&(&1 == module))
+
+    (import_dependents ++ call_dependents) |> Enum.uniq() |> Enum.sort()
+  end
+
+  # Format functions for output
+  defp format_functions(functions) do
+    functions
+    |> Enum.map(fn {:function, module, name, arity} ->
+      %{module: module, name: name, arity: arity}
+    end)
+    |> Enum.sort_by(fn %{name: name, arity: arity} -> {name, arity} end)
   end
 
   # Helper: determine severity for cycle

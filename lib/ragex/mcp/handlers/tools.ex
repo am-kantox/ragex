@@ -5755,7 +5755,7 @@ defmodule Ragex.MCP.Handlers.Tools do
       use_rag: use_rag
     ]
 
-    case Ragex.Analysis.Suggestions.analyze_target(target, opts) do
+    case Suggestions.analyze_target(target, opts) do
       {:ok, result} ->
         format_suggestions_result(result, format)
 
@@ -5766,8 +5766,8 @@ defmodule Ragex.MCP.Handlers.Tools do
 
   defp suggest_refactorings_tool(_), do: {:error, "Missing required 'target' parameter"}
 
-  defp explain_suggestion_tool(%{"suggestion_id" => suggestion_id} = params) do
-    # This is a simplified implementation - in production, you'd need to
+  defp explain_suggestion_tool(%{"suggestion_id" => _suggestion_id} = _params) do
+    # [TODO] This is a simplified implementation - in production, you'd need to
     # maintain a cache of suggestions by ID to look them up
     {:error,
      "explain_suggestion requires maintaining suggestion state - use detailed format in suggest_refactorings instead"}
@@ -5833,8 +5833,7 @@ defmodule Ragex.MCP.Handlers.Tools do
 
   defp format_suggestions_result(result, "detailed") do
     suggestions_text =
-      result.suggestions
-      |> Enum.map(fn sugg ->
+      Enum.map_join(result.suggestions, "\n", fn sugg ->
         action_text =
           if sugg.action_plan do
             steps =
@@ -5864,7 +5863,6 @@ defmodule Ragex.MCP.Handlers.Tools do
           Benefit: #{sugg.benefit}#{action_text}#{rag_text}
         """
       end)
-      |> Enum.join("\n")
 
     content = """
     Refactoring Suggestions

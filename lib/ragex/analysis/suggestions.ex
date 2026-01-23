@@ -35,8 +35,8 @@ defmodule Ragex.Analysis.Suggestions do
       {:ok, complexity} = Suggestions.analyze_target(target, patterns: [:simplify_complexity])
   """
 
-  alias Ragex.Analysis.{DeadCode, Duplication, Impact, Quality, DependencyGraph}
-  alias Ragex.Analysis.Suggestions.{Patterns, Ranker, Actions, RAGAdvisor}
+  alias Ragex.Analysis.{DeadCode, DependencyGraph, Duplication, Quality}
+  alias Ragex.Analysis.Suggestions.{Actions, Patterns, RAGAdvisor, Ranker}
   alias Ragex.Graph.Store
 
   require Logger
@@ -264,7 +264,7 @@ defmodule Ragex.Analysis.Suggestions do
         %{function_count: length(functions), functions: functions}
 
       {:function, module, name, arity} ->
-        case Store.get_node({:function, module, name, arity}) do
+        case Store.get_function(module, name, arity) do
           {:ok, node} -> %{node: node}
           _ -> %{}
         end
@@ -387,12 +387,10 @@ defmodule Ragex.Analysis.Suggestions do
     |> Enum.into(%{})
   end
 
-  defp calculate_average_score(suggestions) do
-    if length(suggestions) > 0 do
-      total = Enum.reduce(suggestions, 0.0, fn s, acc -> acc + s.priority_score end)
-      Float.round(total / length(suggestions), 2)
-    else
-      0.0
-    end
+  defp calculate_average_score([]), do: 0.0
+
+  defp calculate_average_score([_ | _] = suggestions) do
+    total = Enum.reduce(suggestions, 0.0, fn s, acc -> acc + s.priority_score end)
+    Float.round(total / length(suggestions), 2)
   end
 end

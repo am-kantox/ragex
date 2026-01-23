@@ -26,6 +26,31 @@ defmodule Ragex.AI.Provider.Registry do
     GenServer.call(__MODULE__, {:get, provider_name})
   end
 
+  @doc """
+  Get provider module by name.
+
+  Alias for `get/1` with more explicit naming.
+
+  ## Parameters
+  - `provider_name`: Provider identifier atom (e.g., `:deepseek_r1`, `:openai`, `:anthropic`)
+
+  ## Returns
+  - `{:ok, module}` - Provider module if registered
+  - `{:error, :not_found}` - Provider not found in registry
+
+  ## Examples
+
+      iex> Registry.get_provider(:deepseek_r1)
+      {:ok, Ragex.AI.Provider.DeepSeekR1}
+
+      iex> Registry.get_provider(:unknown)
+      {:error, :not_found}
+  """
+  @spec get_provider(atom()) :: {:ok, module()} | {:error, :not_found}
+  def get_provider(provider_name) do
+    get(provider_name)
+  end
+
   @doc "List all registered providers"
   def list do
     GenServer.call(__MODULE__, :list)

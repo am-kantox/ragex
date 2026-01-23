@@ -17,7 +17,7 @@ defmodule Ragex.Analysis.Suggestions.RAGAdvisor do
       IO.puts(advice)
   """
 
-  alias Ragex.RAG.Pipeline
+  alias Ragex.{AI.Config, AI.Registry, RAG.Pipeline}
   require Logger
 
   @doc """
@@ -36,7 +36,7 @@ defmodule Ragex.Analysis.Suggestions.RAGAdvisor do
   """
   def generate_advice(suggestion, opts \\ []) do
     pattern = suggestion[:pattern]
-    
+
     Logger.debug("Generating RAG advice for #{pattern} suggestion")
 
     with {:ok, prompt} <- build_prompt(suggestion),
@@ -214,9 +214,9 @@ defmodule Ragex.Analysis.Suggestions.RAGAdvisor do
     temperature = Keyword.get(opts, :temperature, 0.7)
     max_tokens = Keyword.get(opts, :max_tokens, 500)
 
-    case Ragex.AI.Config.get_default_provider() do
+    case Config.get_default_provider() do
       {:ok, provider_name} ->
-        provider = Ragex.AI.Registry.get_provider(provider_name)
+        provider = Registry.get_provider(provider_name)
 
         case provider.generate(prompt,
                temperature: temperature,
@@ -261,9 +261,7 @@ defmodule Ragex.Analysis.Suggestions.RAGAdvisor do
   defp format_target(target), do: inspect(target)
 
   defp format_metrics(metrics) when is_map(metrics) do
-    metrics
-    |> Enum.map(fn {k, v} -> "#{k}: #{format_metric_value(v)}" end)
-    |> Enum.join(", ")
+    Enum.map_join(metrics, ", ", fn {k, v} -> "#{k}: #{format_metric_value(v)}" end)
   end
 
   defp format_metrics(_), do: "No metrics available"
@@ -314,7 +312,7 @@ defmodule Ragex.Analysis.Suggestions.RAGAdvisor do
   Returns true if an AI provider is configured, false otherwise.
   """
   def available? do
-    case Ragex.AI.Config.get_default_provider() do
+    case Config.get_default_provider() do
       {:ok, _} -> true
       _ -> false
     end

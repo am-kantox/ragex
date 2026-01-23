@@ -31,6 +31,30 @@ defmodule Ragex.AI.Config do
   end
 
   @doc """
+  Get the default provider (returns provider name as atom).
+
+  This is an alias for `provider_name/0` with more explicit naming.
+  Returns the configured default provider identifier.
+
+  ## Returns
+  - Provider name atom (e.g., `:deepseek_r1`, `:openai`, `:anthropic`)
+
+  ## Examples
+
+      iex> Config.get_default_provider()
+      :deepseek_r1
+
+  ## Configuration
+
+      config :ragex, :ai,
+        default_provider: :openai
+  """
+  @spec get_default_provider() :: atom()
+  def get_default_provider do
+    provider_name()
+  end
+
+  @doc """
   Get the configured default provider name.
   """
   def provider_name do

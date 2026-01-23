@@ -22,7 +22,7 @@ defmodule Ragex.Analysis.Suggestions.PatternsTest do
   describe "detect/3 with mock data" do
     test "returns empty list for unknown pattern" do
       data = %{quality: %{}, duplication: %{}, dead_code: %{}}
-      
+
       assert {:error, :unknown_pattern} = Patterns.detect(:unknown_pattern, data, [])
     end
 
@@ -50,8 +50,7 @@ defmodule Ragex.Analysis.Suggestions.PatternsTest do
 
       {:ok, suggestions} = Patterns.detect(:extract_function, data, [])
 
-      assert length(suggestions) > 0
-      suggestion = hd(suggestions)
+      assert [suggestion | _] = suggestions
       assert suggestion.pattern == :extract_function
       assert suggestion.confidence > 0
       assert suggestion.metrics.complexity == 20
@@ -81,8 +80,7 @@ defmodule Ragex.Analysis.Suggestions.PatternsTest do
 
       {:ok, suggestions} = Patterns.detect(:inline_function, data, [])
 
-      assert length(suggestions) > 0
-      suggestion = hd(suggestions)
+      assert [suggestion | _] = suggestions
       assert suggestion.pattern == :inline_function
       assert suggestion.confidence == 0.7
     end
@@ -99,8 +97,7 @@ defmodule Ragex.Analysis.Suggestions.PatternsTest do
 
       {:ok, suggestions} = Patterns.detect(:split_module, data, [])
 
-      assert length(suggestions) > 0
-      suggestion = hd(suggestions)
+      assert [suggestion | _] = suggestions
       assert suggestion.pattern == :split_module
       assert suggestion.metrics.function_count == 35
     end
@@ -125,8 +122,7 @@ defmodule Ragex.Analysis.Suggestions.PatternsTest do
 
       {:ok, suggestions} = Patterns.detect(:remove_dead_code, data, [])
 
-      assert length(suggestions) > 0
-      suggestion = hd(suggestions)
+      assert [suggestion | _] = suggestions
       assert suggestion.pattern == :remove_dead_code
       assert suggestion.confidence == 0.9
     end
@@ -146,8 +142,7 @@ defmodule Ragex.Analysis.Suggestions.PatternsTest do
 
       {:ok, suggestions} = Patterns.detect(:reduce_coupling, data, [])
 
-      assert length(suggestions) > 0
-      suggestion = hd(suggestions)
+      assert [suggestion | _] = suggestions
       assert suggestion.pattern == :reduce_coupling
       assert suggestion.metrics.efferent == 15
     end
@@ -177,8 +172,7 @@ defmodule Ragex.Analysis.Suggestions.PatternsTest do
 
       {:ok, suggestions} = Patterns.detect(:simplify_complexity, data, [])
 
-      assert length(suggestions) > 0
-      suggestion = hd(suggestions)
+      assert [suggestion | _] = suggestions
       assert suggestion.pattern == :simplify_complexity
       assert suggestion.metrics.cyclomatic_complexity == 18
     end
@@ -222,7 +216,7 @@ defmodule Ragex.Analysis.Suggestions.PatternsTest do
       {:ok, sugg_high_list} = Patterns.detect(:extract_function, data_high, [])
 
       # These might not trigger if below threshold, so skip if empty
-      if length(sugg_low_list) > 0 and length(sugg_high_list) > 0 do
+      if match?([_ | _], sugg_low_list) and match?([_ | _], sugg_high_list) do
         [sugg_low] = sugg_low_list
         [sugg_high] = sugg_high_list
 

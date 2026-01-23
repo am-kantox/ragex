@@ -39,6 +39,29 @@ defmodule Ragex.Graph.Store do
   end
 
   @doc """
+  Retrieves a node by its composite key.
+
+  ## Parameters
+  - `node_key` - Tuple of `{node_type, node_id}`
+
+  ## Returns
+  - Node data map if found
+  - `nil` if not found
+
+  ## Examples
+
+      iex> Store.add_node(:module, MyModule, %{name: MyModule})
+      iex> Store.get_node({:module, MyModule})
+      %{name: MyModule}
+
+      iex> Store.get_node({:module, NonExistent})
+      nil
+  """
+  def get_node({node_type, node_id}) do
+    find_node(node_type, node_id)
+  end
+
+  @doc """
   Finds a node by type and id.
   """
   def find_node(node_type, node_id) do
