@@ -5,6 +5,7 @@ defmodule Ragex.MCP.Handlers.Tools do
   Implements the tools/list and tools/call methods.
   """
   alias Ragex.AI.{Cache, Usage}
+  alias Ragex.Analysis.{MetastaticBridge, QualityStore}
   alias Ragex.Analyzers.Directory
   alias Ragex.Analyzers.Elixir, as: ElixirAnalyzer
   alias Ragex.Analyzers.Erlang, as: ErlangAnalyzer
@@ -1115,6 +1116,113 @@ defmodule Ragex.MCP.Handlers.Tools do
             },
             required: ["files"]
           }
+        },
+        %{
+          name: "analyze_quality",
+          description:
+            "Analyze code quality metrics for a file or directory using Metastatic - provides complexity, purity, and other code quality indicators",
+          inputSchema: %{
+            type: "object",
+            properties: %{
+              path: %{
+                type: "string",
+                description: "File or directory path to analyze"
+              },
+              metrics: %{
+                type: "array",
+                description:
+                  "Specific metrics to compute (if not specified, computes all available metrics)",
+                items: %{
+                  type: "string",
+                  enum: [
+                    "cyclomatic",
+                    "cognitive",
+                    "nesting",
+                    "halstead",
+                    "loc",
+                    "function_metrics",
+                    "purity"
+                  ]
+                }
+              },
+              store_results: %{
+                type: "boolean",
+                description: "Store results in knowledge graph for later querying",
+                default: true
+              },
+              recursive: %{
+                type: "boolean",
+                description: "Recursively analyze directories",
+                default: true
+              }
+            },
+            required: ["path"]
+          }
+        },
+        %{
+          name: "quality_report",
+          description:
+            "Generate a comprehensive quality report for analyzed files - includes statistics, trends, and language-specific breakdowns",
+          inputSchema: %{
+            type: "object",
+            properties: %{
+              report_type: %{
+                type: "string",
+                description: "Type of report to generate",
+                enum: ["summary", "detailed", "by_language", "trends"],
+                default: "summary"
+              },
+              format: %{
+                type: "string",
+                description: "Output format",
+                enum: ["text", "json", "markdown"],
+                default: "text"
+              },
+              include_files: %{
+                type: "boolean",
+                description: "Include individual file details",
+                default: false
+              }
+            }
+          }
+        },
+        %{
+          name: "find_complex_code",
+          description:
+            "Find files or functions exceeding complexity thresholds - useful for identifying refactoring candidates",
+          inputSchema: %{
+            type: "object",
+            properties: %{
+              metric: %{
+                type: "string",
+                description: "Complexity metric to evaluate",
+                enum: ["cyclomatic", "cognitive", "nesting"],
+                default: "cyclomatic"
+              },
+              threshold: %{
+                type: "number",
+                description: "Threshold value (files exceeding this are returned)",
+                default: 10
+              },
+              comparison: %{
+                type: "string",
+                description: "Comparison operator",
+                enum: ["gt", "gte", "lt", "lte", "eq"],
+                default: "gt"
+              },
+              limit: %{
+                type: "integer",
+                description: "Maximum number of results",
+                default: 20
+              },
+              sort_order: %{
+                type: "string",
+                description: "Sort order for results",
+                enum: ["asc", "desc"],
+                default: "desc"
+              }
+            }
+          }
         }
       ]
     }
@@ -1248,6 +1356,15 @@ defmodule Ragex.MCP.Handlers.Tools do
 
       "visualize_impact" ->
         visualize_impact_tool(arguments)
+
+      "analyze_quality" ->
+        analyze_quality_tool(arguments)
+
+      "quality_report" ->
+        quality_report_tool(arguments)
+
+      "find_complex_code" ->
+        find_complex_code_tool(arguments)
 
       _ ->
         {:error, "Unknown tool: #{tool_name}"}
@@ -3640,4 +3757,403 @@ defmodule Ragex.MCP.Handlers.Tools do
   end
 
   defp visualize_impact_tool(_), do: {:error, "Missing required 'files' parameter"}
+
+  # Quality analysis tool implementations (Phase 11)
+
+  defp analyze_quality_tool(%{"path" => path} = params) do
+    # Parse options
+    metrics = parse_quality_metrics(Map.get(params, "metrics", []))
+    store_results = Map.get(params, "store_results", true)
+    recursive = Map.get(params, "recursive", true)
+
+    opts = []
+    opts = if metrics != [], do: Keyword.put(opts, :metrics, metrics), else: opts
+    opts = Keyword.put(opts, :mode, if(recursive, do: :parallel, else: :sequential))
+
+    # Check if path is file or directory
+    case File.stat(path) do
+      {:ok, %{type: :directory}} ->
+        # Analyze directory
+        case MetastaticBridge.analyze_directory(path, opts) do
+          {:ok, results} ->
+            # Optionally store results
+            if store_results do
+              Enum.each(results, fn {:ok, result} ->
+                QualityStore.store_metrics(result)
+              end)
+            end
+
+            # Format response
+            success_count = Enum.count(results, &match?({:ok, _}, &1))
+            error_count = Enum.count(results, &match?({:error, _}, &1))
+
+            files_analyzed =
+              Enum.map(results, fn
+                {:ok, result} ->
+                  %{
+                    path: result.path,
+                    language: result.language,
+                    metrics: format_metrics(result)
+                  }
+
+                {:error, {path, reason}} ->
+                  %{
+                    path: path,
+                    error: inspect(reason)
+                  }
+              end)
+
+            {:ok,
+             %{
+               status: "success",
+               type: "directory",
+               path: path,
+               files_analyzed: success_count,
+               errors: error_count,
+               results: files_analyzed,
+               stored: store_results
+             }}
+
+          {:error, reason} ->
+            {:error, "Failed to analyze directory: #{inspect(reason)}"}
+        end
+
+      {:ok, %{type: :regular}} ->
+        # Analyze single file
+        case MetastaticBridge.analyze_file(path, opts) do
+          {:ok, result} ->
+            # Optionally store result
+            if store_results do
+              QualityStore.store_metrics(result)
+            end
+
+            {:ok,
+             %{
+               status: "success",
+               type: "file",
+               path: result.path,
+               language: result.language,
+               metrics: format_metrics(result),
+               stored: store_results
+             }}
+
+          {:error, reason} ->
+            {:error, "Failed to analyze file: #{inspect(reason)}"}
+        end
+
+      {:error, :enoent} ->
+        {:error, "Path does not exist: #{path}"}
+
+      {:error, reason} ->
+        {:error, "Failed to access path: #{inspect(reason)}"}
+    end
+  end
+
+  defp analyze_quality_tool(_), do: {:error, "Missing required 'path' parameter"}
+
+  defp quality_report_tool(params) do
+    report_type = Map.get(params, "report_type", "summary")
+    format = Map.get(params, "format", "text")
+    include_files = Map.get(params, "include_files", false)
+
+    result =
+      case report_type do
+        "summary" ->
+          stats = QualityStore.project_stats()
+          format_summary_report(stats, format)
+
+        "detailed" ->
+          stats = QualityStore.project_stats()
+          files = if include_files, do: list_all_files_with_metrics(), else: []
+          format_detailed_report(stats, files, format)
+
+        "by_language" ->
+          by_lang = QualityStore.stats_by_language()
+          format_language_report(by_lang, format)
+
+        "trends" ->
+          # Trends require historical data - for now return current snapshot
+          stats = QualityStore.project_stats()
+          format_trends_report(stats, format)
+
+        _ ->
+          {:error, "Unknown report type: #{report_type}"}
+      end
+
+    case result do
+      {:ok, content} ->
+        {:ok,
+         %{
+           status: "success",
+           report_type: report_type,
+           format: format,
+           content: content,
+           files_included: include_files
+         }}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp find_complex_code_tool(params) do
+    metric = String.to_atom(Map.get(params, "metric", "cyclomatic"))
+    threshold = Map.get(params, "threshold", 10)
+    comparison = String.to_atom(Map.get(params, "comparison", "gt"))
+    limit = Map.get(params, "limit", 20)
+    sort_order = String.to_atom(Map.get(params, "sort_order", "desc"))
+
+    # Find files exceeding threshold
+    results = QualityStore.find_by_threshold(metric, threshold, comparison)
+
+    # Sort and limit
+    sorted =
+      case sort_order do
+        :asc ->
+          Enum.sort_by(results, fn {_path, value} -> value end)
+
+        :desc ->
+          Enum.sort_by(results, fn {_path, value} -> -value end)
+      end
+      |> Enum.take(limit)
+
+    # Format results
+    formatted_results =
+      Enum.map(sorted, fn {path, value} ->
+        metrics = QualityStore.get_metrics(path)
+
+        # Extract language safely
+        language =
+          case metrics do
+            nil -> "unknown"
+            m when is_map(m) -> Map.get(m, :language, "unknown")
+          end
+
+        all_metrics =
+          case metrics do
+            nil -> %{}
+            m when is_map(m) -> format_metrics(Map.put(m, :path, path))
+          end
+
+        %{
+          path: path,
+          metric_value: value,
+          metric_type: Atom.to_string(metric),
+          language: language,
+          all_metrics: all_metrics
+        }
+      end)
+
+    {:ok,
+     %{
+       status: "success",
+       metric: Atom.to_string(metric),
+       threshold: threshold,
+       comparison: Atom.to_string(comparison),
+       results_count: length(formatted_results),
+       results: formatted_results
+     }}
+  end
+
+  # Helper functions for quality analysis
+
+  defp parse_quality_metrics(metrics) when is_list(metrics) do
+    Enum.map(metrics, &String.to_atom/1)
+  end
+
+  defp parse_quality_metrics(_), do: []
+
+  defp format_metrics(result) do
+    base = %{
+      cyclomatic: Map.get(result, :cyclomatic),
+      cognitive: Map.get(result, :cognitive),
+      max_nesting: Map.get(result, :max_nesting),
+      loc: Map.get(result, :loc),
+      halstead_difficulty: Map.get(result, :halstead_difficulty),
+      halstead_effort: Map.get(result, :halstead_effort)
+    }
+
+    # Add purity if available
+    base =
+      if Map.has_key?(result, :purity_pure?) do
+        Map.merge(base, %{
+          purity_pure: result.purity_pure?,
+          purity_score: Map.get(result, :purity_score),
+          side_effects_count: Map.get(result, :side_effects_count)
+        })
+      else
+        base
+      end
+
+    # Add warnings if present
+    base =
+      if warnings = Map.get(result, :warnings) do
+        Map.put(base, :warnings, warnings)
+      else
+        base
+      end
+
+    # Remove nil values
+    Enum.reject(base, fn {_k, v} -> is_nil(v) end)
+    |> Enum.into(%{})
+  end
+
+  defp list_all_files_with_metrics do
+    Store.list_nodes(:quality_metrics, :infinity)
+    |> Enum.map(fn node ->
+      %{
+        path: node.data.path,
+        language: node.data.language,
+        metrics: format_metrics(node.data)
+      }
+    end)
+  end
+
+  defp format_summary_report(stats, "json") do
+    {:ok, Jason.encode!(stats, pretty: true)}
+  end
+
+  defp format_summary_report(stats, "markdown") do
+    content = """
+    # Code Quality Summary Report
+
+    ## Overview
+    - Total Files: #{stats.total_files}
+    - Files with Warnings: #{stats.files_with_warnings}
+    - Impure Files: #{stats.impure_files}
+
+    ## Complexity Metrics
+    - Average Cyclomatic Complexity: #{stats.avg_cyclomatic}
+    - Average Cognitive Complexity: #{stats.avg_cognitive}
+    - Average Nesting Depth: #{stats.avg_nesting}
+
+    ## Ranges
+    - Cyclomatic: #{stats.min_cyclomatic} - #{stats.max_cyclomatic}
+    - Cognitive: #{stats.min_cognitive} - #{stats.max_cognitive}
+    - Nesting: #{stats.min_nesting} - #{stats.max_nesting}
+
+    ## Languages
+    #{format_language_list(stats.languages)}
+    """
+
+    {:ok, content}
+  end
+
+  defp format_summary_report(stats, "text") do
+    content = """
+    Code Quality Summary
+    ===================
+    Total Files: #{stats.total_files}
+    Files with Warnings: #{stats.files_with_warnings}
+    Impure Files: #{stats.impure_files}
+
+    Complexity Metrics:
+      Avg Cyclomatic: #{stats.avg_cyclomatic} (Range: #{stats.min_cyclomatic}-#{stats.max_cyclomatic})
+      Avg Cognitive: #{stats.avg_cognitive} (Range: #{stats.min_cognitive}-#{stats.max_cognitive})
+      Avg Nesting: #{stats.avg_nesting} (Range: #{stats.min_nesting}-#{stats.max_nesting})
+
+    Languages: #{format_language_list_text(stats.languages)}
+    """
+
+    {:ok, content}
+  end
+
+  defp format_detailed_report(stats, files, "json") do
+    {:ok, Jason.encode!(%{summary: stats, files: files}, pretty: true)}
+  end
+
+  defp format_detailed_report(stats, files, format) do
+    # For text/markdown, show summary + top complex files
+    {:ok, summary_content} = format_summary_report(stats, format)
+
+    files_section =
+      if files != [] do
+        top_files =
+          files
+          |> Enum.sort_by(fn f -> -(f.metrics[:cyclomatic] || 0) end)
+          |> Enum.take(10)
+
+        files_text =
+          Enum.map_join(top_files, "\n", fn f ->
+            "  - #{f.path} (#{f.language}): cyclomatic=#{f.metrics[:cyclomatic] || 0}"
+          end)
+
+        "\nTop 10 Most Complex Files:\n" <> files_text
+      else
+        ""
+      end
+
+    {:ok, summary_content <> files_section}
+  end
+
+  defp format_language_report(by_lang, "json") do
+    {:ok, Jason.encode!(by_lang, pretty: true)}
+  end
+
+  defp format_language_report(by_lang, "markdown") do
+    content =
+      "# Code Quality by Language\n\n" <>
+        Enum.map_join(by_lang, "\n\n", fn {lang, stats} ->
+          """
+          ## #{lang |> Atom.to_string() |> String.capitalize()}
+          - Files: #{stats.total_files}
+          - Avg Cyclomatic: #{stats.avg_cyclomatic}
+          - Avg Cognitive: #{stats.avg_cognitive}
+          - Files with Warnings: #{stats.files_with_warnings}
+          """
+        end)
+
+    {:ok, content}
+  end
+
+  defp format_language_report(by_lang, "text") do
+    content =
+      "Code Quality by Language\n" <>
+        String.duplicate("=", 25) <>
+        "\n\n" <>
+        Enum.map_join(by_lang, "\n\n", fn {lang, stats} ->
+          """
+          #{lang |> Atom.to_string() |> String.upcase()}:
+            Files: #{stats.total_files}
+            Avg Cyclomatic: #{stats.avg_cyclomatic}
+            Avg Cognitive: #{stats.avg_cognitive}
+            Warnings: #{stats.files_with_warnings}
+          """
+        end)
+
+    {:ok, content}
+  end
+
+  defp format_trends_report(stats, "json") do
+    # For now, just return current stats as a single data point
+    trend_data = %{
+      timestamp: DateTime.utc_now() |> DateTime.to_iso8601(),
+      metrics: stats
+    }
+
+    {:ok, Jason.encode!(trend_data, pretty: true)}
+  end
+
+  defp format_trends_report(stats, format) do
+    # For text/markdown, note that this is a snapshot
+    {:ok, content} = format_summary_report(stats, format)
+    note = "\n\nNote: Trends require historical data. This is a current snapshot.\n"
+    {:ok, content <> note}
+  end
+
+  defp format_language_list(languages) when is_map(languages) do
+    languages
+    |> Enum.map(fn {lang, count} -> "- #{lang}: #{count} files" end)
+    |> Enum.join("\n    ")
+  end
+
+  defp format_language_list(_), do: "None"
+
+  defp format_language_list_text(languages) when is_map(languages) do
+    languages
+    |> Enum.map(fn {lang, count} -> "#{lang}(#{count})" end)
+    |> Enum.join(", ")
+  end
+
+  defp format_language_list_text(_), do: "None"
 end
