@@ -1,0 +1,173 @@
+.TH RAGEX 1 "January 2026" "Ragex 0.2.0" "Ragex Manual"
+.SH NAME
+ragex \- Hybrid Retrieval-Augmented Generation system for multi-language codebase analysis
+.SH SYNOPSIS
+.B mix ragex
+.I COMMAND
+.RI [ OPTIONS ]
+.SH DESCRIPTION
+.B Ragex
+is a comprehensive code analysis and refactoring tool that combines static analysis, semantic search, and AI-powered features. It builds a knowledge graph of your codebase, generates embeddings for semantic search, and provides interactive tools for code quality analysis and refactoring.
+.PP
+Key features include:
+.IP \(bu 2
+Multi-language support (Elixir, Erlang, Python, JavaScript/TypeScript)
+.IP \(bu 2
+Knowledge graph construction with AST parsing
+.IP \(bu 2
+Semantic search using local ML models (Bumblebee)
+.IP \(bu 2
+Hybrid retrieval (symbolic + semantic)
+.IP \(bu 2
+Interactive refactoring wizards
+.IP \(bu 2
+Code quality analysis (duplication, dead code, complexity)
+.IP \(bu 2
+Live monitoring dashboard
+.IP \(bu 2
+AI integration (OpenAI, Anthropic, DeepSeek, Ollama)
+.SH COMMANDS
+.SS Cache Management
+.TP
+.B ragex.cache.stats
+Display cache statistics including size, hit rates, and embeddings count.
+.TP
+.B ragex.cache.refresh
+Refresh embeddings cache by analyzing codebase files.
+.TP
+.B ragex.cache.clear
+Clear all caches with interactive confirmation.
+.SS Embeddings
+.TP
+.B ragex.embeddings.migrate
+Migrate between embedding models, checking compatibility and regenerating embeddings.
+.SS Refactoring
+.TP
+.B ragex.refactor
+Interactive refactoring wizard supporting:
+.RS
+.IP \(bu 2
+rename_function - Rename functions across call sites
+.IP \(bu 2
+rename_module - Rename modules and update references
+.IP \(bu 2
+change_signature - Modify function parameters
+.IP \(bu 2
+extract_function - Extract code into new function
+.IP \(bu 2
+inline_function - Inline function body into calls
+.RE
+.TP
+.B ragex.configure
+Interactive configuration wizard for project setup, model selection, and AI provider configuration.
+.SS Monitoring
+.TP
+.B ragex.dashboard
+Live monitoring dashboard showing real-time statistics for graph, embeddings, cache, and AI usage.
+.SS AI Features
+.TP
+.B ragex.ai.usage.stats
+Display AI provider usage statistics including requests, tokens, and costs.
+.TP
+.B ragex.ai.cache.stats
+Show AI response cache performance metrics.
+.TP
+.B ragex.ai.cache.clear
+Clear AI response cache with optional operation filtering.
+.SS Shell Integration
+.TP
+.B ragex.completions
+Install shell completion scripts for bash, zsh, or fish.
+.SH CONFIGURATION
+Ragex can be configured via
+.I .ragex.exs
+in your project root or via
+.I config/config.exs
+for application-wide settings.
+.PP
+Run
+.B mix ragex.configure
+to launch the interactive configuration wizard.
+.PP
+Key configuration options:
+.TP
+.B :project_type
+Primary language (:elixir, :erlang, :python, :javascript, :polyglot)
+.TP
+.B :embedding_model
+Embedding model to use (:all_minilm_l6_v2, :all_mpnet_base_v2, :codebert_base, :paraphrase_multilingual)
+.TP
+.B :ai_providers
+Map of AI provider configurations (api_key, base_url, etc.)
+.TP
+.B :analysis
+Analysis options (exclusions, max_file_size_kb, auto_analyze)
+.TP
+.B :cache
+Cache settings (cache_dir, ttl_hours, auto_refresh)
+.SH EXAMPLES
+.TP
+.B Initialize and configure
+mix ragex.configure
+.TP
+.B Analyze your codebase
+mix ragex.cache.refresh --path .
+.TP
+.B Launch interactive refactoring
+mix ragex.refactor
+.TP
+.B View live dashboard
+mix ragex.dashboard
+.TP
+.B Install shell completions
+mix ragex.completions --install
+.TP
+.B Check embedding model status
+mix ragex.embeddings.migrate --check
+.TP
+.B Migrate to different model
+mix ragex.embeddings.migrate --model all_mpnet_base_v2
+.SH FILES
+.TP
+.I .ragex.exs
+Project-specific configuration file
+.TP
+.I ~/.ragex/cache/
+Default cache directory for embeddings and analysis data
+.TP
+.I ~/.ragex/backups/
+Backup directory for refactoring operations
+.TP
+.I ~/.ragex/undo/
+Undo history for refactoring operations
+.SH ENVIRONMENT
+.TP
+.B OPENAI_API_KEY
+API key for OpenAI provider
+.TP
+.B ANTHROPIC_API_KEY
+API key for Anthropic provider
+.TP
+.B DEEPSEEK_API_KEY
+API key for DeepSeek provider
+.TP
+.B DEEPSEEK_R1_API_KEY
+API key for DeepSeek R1 provider
+.TP
+.B RAGEX_EMBEDDING_MODEL
+Override configured embedding model
+.TP
+.B NO_COLOR
+Disable colored output
+.SH SEE ALSO
+.BR ragex-refactor (1),
+.BR ragex-configure (1),
+.BR ragex-dashboard (1)
+.PP
+Full documentation: https://hexdocs.pm/ragex
+.SH BUGS
+Report bugs at: https://github.com/am-kantox/ragex/issues
+.SH AUTHOR
+Written by the Ragex team.
+.SH COPYRIGHT
+Copyright \(co 2026 Ragex Contributors. MIT License.
