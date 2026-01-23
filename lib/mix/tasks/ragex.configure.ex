@@ -110,7 +110,10 @@ defmodule Mix.Tasks.Ragex.Configure do
         "Analyze your codebase: #{Colors.highlight("mix ragex.cache.refresh --path .")}",
         "Start the MCP server: #{Colors.highlight("mix ragex.server")}",
         "Or run interactive refactoring: #{Colors.highlight("mix ragex.refactor")}"
-      ], indent: 2, bullet: "→")
+      ],
+      indent: 2,
+      bullet: "→"
+    )
 
     IO.puts("")
   end
