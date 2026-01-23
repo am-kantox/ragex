@@ -25,10 +25,10 @@ defmodule Mix.Tasks.Ragex.Dashboard do
 
   use Mix.Task
 
-  alias Ragex.CLI.Colors
-  alias Ragex.Graph.Store
-  alias Ragex.Embeddings.Persistence
   alias Ragex.AI.{Cache, Usage}
+  alias Ragex.CLI.Colors
+  alias Ragex.Embeddings.Persistence
+  alias Ragex.Graph.Store
 
   @refresh_interval 1000
 
@@ -111,7 +111,6 @@ defmodule Mix.Tasks.Ragex.Dashboard do
     # Render two panels side by side
     max_lines = max(length(left_lines), length(right_lines))
     left_width = 38
-    right_width = 38
 
     for i <- 0..(max_lines - 1) do
       left_line = Enum.at(left_lines, i, "")
@@ -202,12 +201,13 @@ defmodule Mix.Tasks.Ragex.Dashboard do
       )
     )
 
-    # Get recent activity (placeholder - would need actual activity tracking)
-    activities = [
-      {DateTime.utc_now() |> DateTime.add(-10, :second), "Analyzed 15 files in lib/"},
-      {DateTime.utc_now() |> DateTime.add(-45, :second), "Generated 43 embeddings"},
-      {DateTime.utc_now() |> DateTime.add(-120, :second), "Refactored MyModule.process/2"}
-    ]
+    # [TODO] Get recent activity (placeholder - would need actual activity tracking)
+    activities = []
+    # [
+    #   {DateTime.utc_now() |> DateTime.add(-10, :second), "Analyzed 15 files in lib/"},
+    #   {DateTime.utc_now() |> DateTime.add(-45, :second), "Generated 43 embeddings"},
+    #   {DateTime.utc_now() |> DateTime.add(-120, :second), "Refactored MyModule.process/2"}
+    # ]
 
     if activities == [] do
       IO.puts("│ " <> Colors.muted("No recent activity"))
@@ -247,8 +247,8 @@ defmodule Mix.Tasks.Ragex.Dashboard do
 
     cond do
       diff < 60 -> "#{diff}s ago"
-      diff < 3600 -> "#{div(diff, 60)}m ago"
-      diff < 86400 -> "#{div(diff, 3600)}h ago"
+      diff < 3_600 -> "#{div(diff, 60)}m ago"
+      diff < 86_400 -> "#{div(diff, 3_600)}h ago"
       true -> "#{div(diff, 86400)}d ago"
     end
     |> String.pad_trailing(10)
@@ -261,10 +261,9 @@ defmodule Mix.Tasks.Ragex.Dashboard do
     edges = Store.list_edges()
 
     avg_degree =
-      if length(all_nodes) > 0 do
-        Float.round(length(edges) * 2 / length(all_nodes), 1)
-      else
-        0.0
+      case all_nodes do
+        [_ | _] -> Float.round(length(edges) * 2 / length(all_nodes), 1)
+        _ -> 0.0
       end
 
     %{
@@ -291,7 +290,7 @@ defmodule Mix.Tasks.Ragex.Dashboard do
 
     cache_size =
       case Persistence.cache_stats() do
-        {:ok, stats} -> format_bytes(stats.size_bytes)
+        {:ok, stats} -> format_bytes(stats.file_size)
         _ -> "N/A"
       end
 
