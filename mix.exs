@@ -39,6 +39,8 @@ defmodule Ragex.MixProject do
     [
       {:jason, "~> 1.4"},
       {:file_system, "~> 1.0"},
+      # TUI Framework
+      {:owl, "~> 0.12"},
       # Embeddings and ML
       {:bumblebee, "~> 0.5"},
       {:nx, "~> 0.9"},
