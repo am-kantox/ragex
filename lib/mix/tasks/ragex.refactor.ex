@@ -109,8 +109,7 @@ defmodule Mix.Tasks.Ragex.Refactor do
   end
 
   defp codebase_ready? do
-    modules = Store.list_modules()
-    length(modules) > 0
+    match?([_ | _], Store.list_modules())
   end
 
   defp select_operation do
@@ -138,7 +137,6 @@ defmodule Mix.Tasks.Ragex.Refactor do
 
     # Get module
     modules = Store.list_modules()
-    module_names = Enum.map(modules, &Atom.to_string/1)
 
     IO.puts("Available modules: #{length(modules)}")
     module_str = Prompt.input("Module name", validate: &validate_module(&1, modules))
@@ -202,7 +200,6 @@ defmodule Mix.Tasks.Ragex.Refactor do
 
     # Get current module
     modules = Store.list_modules()
-    module_names = Enum.map(modules, &Atom.to_string/1)
 
     IO.puts("Available modules: #{length(modules)}")
     old_module_str = Prompt.input("Current module name", validate: &validate_module(&1, modules))

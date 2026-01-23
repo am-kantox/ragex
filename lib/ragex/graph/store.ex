@@ -61,6 +61,112 @@ defmodule Ragex.Graph.Store do
   end
 
   @doc """
+  Retrieves a function node by module, name, and arity.
+
+  Returns the function data or nil if not found.
+
+  ## Parameters
+  - `module` - The module containing the function
+  - `name` - The function name (atom)
+  - `arity` - The function arity (non-negative integer)
+
+  ## Examples
+
+      iex> Store.add_node(:function, {MyModule, :test, 2}, %{name: :test, arity: 2})
+      iex> Store.get_function(MyModule, :test, 2)
+      %{name: :test, arity: 2}
+
+      iex> Store.get_function(MyModule, :nonexistent, 1)
+      nil
+  """
+  def get_function(module, name, arity) do
+    find_node(:function, {module, name, arity})
+  end
+
+  @doc """
+  Retrieves a module node by name.
+
+  Returns the module data or nil if not found.
+
+  ## Examples
+
+      iex> Store.add_node(:module, MyModule, %{name: MyModule, file: "lib/my_module.ex"})
+      iex> Store.get_module(MyModule)
+      %{name: MyModule, file: "lib/my_module.ex"}
+
+      iex> Store.get_module(NonExistentModule)
+      nil
+  """
+  def get_module(module) do
+    find_node(:module, module)
+  end
+
+  @doc """
+  Lists all module nodes.
+
+  ## Returns
+  List of module maps with keys:
+  - `:id` - Module identifier (atom)
+  - `:data` - Module data
+
+  ## Examples
+
+      iex> Store.add_node(:module, ModuleA, %{name: ModuleA, file: "lib/a.ex"})
+      iex> Store.add_node(:module, ModuleB, %{name: ModuleB, file: "lib/b.ex"})
+      iex> Store.list_modules()
+      [%{id: ModuleA, data: %{name: ModuleA, file: "lib/a.ex"}}, ...]
+  """
+  def list_modules do
+    list_nodes(:module, :infinity)
+    |> Enum.map(fn node ->
+      %{id: node.id, data: node.data}
+    end)
+  end
+
+  @doc """
+  Lists function nodes with optional filtering by module.
+
+  ## Parameters
+  - `opts` - Keyword list with options:
+    - `:module` - Filter by module (optional)
+    - `:limit` - Maximum number of functions to return (default: 1000)
+
+  ## Returns
+  List of function maps with keys:
+  - `:id` - Function identifier tuple `{module, name, arity}`
+  - `:data` - Function data
+
+  ## Examples
+
+      iex> Store.add_node(:function, {MyModule, :test, 2}, %{name: :test, arity: 2})
+      iex> Store.list_functions()
+      [%{id: {MyModule, :test, 2}, data: %{name: :test, arity: 2}}]
+
+      iex> Store.list_functions(module: MyModule, limit: 50)
+      [%{id: {MyModule, :test, 2}, data: ...}, ...]
+  """
+  def list_functions(opts \\ []) do
+    module_filter = Keyword.get(opts, :module)
+    limit = Keyword.get(opts, :limit, 1000)
+
+    pattern =
+      case module_filter do
+        nil -> {{:function, {:"$1", :"$2", :"$3"}}, :"$4"}
+        mod -> {{:function, {mod, :"$1", :"$2"}}, :"$3"}
+      end
+
+    :ets.match(@nodes_table, pattern)
+    |> Enum.take(limit)
+    |> Enum.map(fn
+      [module, name, arity, data] ->
+        %{id: {module, name, arity}, data: data}
+
+      [name, arity, data] ->
+        %{id: {module_filter, name, arity}, data: data}
+    end)
+  end
+
+  @doc """
   Lists nodes with optional filtering by type.
   """
   def list_nodes(node_type \\ nil, limit \\ 100) do
@@ -146,6 +252,50 @@ defmodule Ragex.Graph.Store do
       [{_key, metadata}] -> Map.get(metadata, :weight, 1.0)
       [] -> nil
     end
+  end
+
+  @doc """
+  Lists all edges with optional filtering by type and limit.
+
+  ## Parameters
+  - `opts` - Keyword list with options:
+    - `:edge_type` - Filter by edge type (optional)
+    - `:limit` - Maximum number of edges to return (default: 1000)
+
+  ## Returns
+  List of edge maps with keys:
+  - `:from` - Source node
+  - `:to` - Target node
+  - `:type` - Edge type
+  - `:metadata` - Edge metadata including weight
+
+  ## Examples
+
+      iex> Store.list_edges(limit: 100)
+      [%{from: node1, to: node2, type: :calls, metadata: %{weight: 1.0}}, ...]
+
+      iex> Store.list_edges(edge_type: :imports)
+      [%{from: mod1, to: mod2, type: :imports, metadata: %{weight: 1.0}}, ...]
+  """
+  def list_edges(opts \\ []) do
+    edge_type = Keyword.get(opts, :edge_type)
+    limit = Keyword.get(opts, :limit, 1000)
+
+    pattern =
+      case edge_type do
+        nil -> {{:"$1", :"$2", :"$3"}, :"$4"}
+        type -> {{:"$1", :"$2", type}, :"$3"}
+      end
+
+    :ets.match(@edges_table, pattern)
+    |> Enum.take(limit)
+    |> Enum.map(fn
+      [from_node, to_node, edge_type, metadata] ->
+        %{from: from_node, to: to_node, type: edge_type, metadata: metadata}
+
+      [from_node, to_node, metadata] ->
+        %{from: from_node, to: to_node, type: edge_type, metadata: metadata}
+    end)
   end
 
   @doc """

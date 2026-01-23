@@ -38,9 +38,9 @@ defmodule Mix.Tasks.Ragex.Embeddings.Migrate do
 
   use Mix.Task
 
+  alias Ragex.CLI.{Colors, Output, Prompt}
   alias Ragex.Embeddings.Registry
   alias Ragex.Graph.Store
-  alias Ragex.CLI.{Colors, Output, Prompt}
 
   @impl Mix.Task
   def run(args) do
@@ -184,7 +184,10 @@ defmodule Mix.Tasks.Ragex.Embeddings.Migrate do
         "Change config to use a compatible model",
         "OR run: #{Colors.highlight("mix ragex.embeddings.migrate --clear")}",
         "Then re-analyze your codebase"
-      ], indent: 4, bullet: "→")
+      ],
+      indent: 4,
+      bullet: "→"
+    )
 
     IO.puts("")
   end
@@ -274,7 +277,10 @@ defmodule Mix.Tasks.Ragex.Embeddings.Migrate do
         "Clear existing: #{Colors.highlight("mix ragex.embeddings.migrate --clear")}",
         "Update config.exs: #{Colors.highlight("config :ragex, :embedding_model, :#{model_id}")}",
         "Re-analyze your codebase"
-      ], indent: 4, bullet: "→")
+      ],
+      indent: 4,
+      bullet: "→"
+    )
 
     IO.puts("")
   end
@@ -288,7 +294,10 @@ defmodule Mix.Tasks.Ragex.Embeddings.Migrate do
         "Update config.exs: #{Colors.highlight("config :ragex, :embedding_model, :#{model_id}")}",
         "Restart server",
         "Analyze your codebase"
-      ], indent: 2, bullet: "→")
+      ],
+      indent: 2,
+      bullet: "→"
+    )
 
     IO.puts("")
   end
@@ -314,7 +323,10 @@ defmodule Mix.Tasks.Ragex.Embeddings.Migrate do
             "Stop the server",
             "Embeddings are stored in memory (ETS)",
             "They will be cleared on next restart"
-          ], indent: 2, bullet: "→")
+          ],
+          indent: 2,
+          bullet: "→"
+        )
 
         IO.puts(
           "\n" <> Colors.muted("Or restart with clean state: kill the server process and restart")

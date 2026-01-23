@@ -151,7 +151,7 @@ defmodule Ragex.CLI.Prompt do
       "Green"
   """
   @spec select(String.t(), [any()], keyword()) :: any()
-  def select(message, options, opts \\ []) when is_list(options) and length(options) > 0 do
+  def select(message, [_ | _] = options, opts \\ []) do
     default = Keyword.get(opts, :default)
     display_fn = Keyword.get(opts, :display_fn, &to_string/1)
 
@@ -218,7 +218,7 @@ defmodule Ragex.CLI.Prompt do
       ["Cheese", "Olives"]
   """
   @spec multi_select(String.t(), [any()], keyword()) :: [any()]
-  def multi_select(message, options, opts \\ []) when is_list(options) and length(options) > 0 do
+  def multi_select(message, [_ | _] = options, opts \\ []) do
     min_selections = Keyword.get(opts, :min, 0)
     max_selections = Keyword.get(opts, :max, length(options))
     display_fn = Keyword.get(opts, :display_fn, &to_string/1)

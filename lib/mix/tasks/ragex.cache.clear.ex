@@ -27,8 +27,9 @@ defmodule Mix.Tasks.Ragex.Cache.Clear do
   """
 
   use Mix.Task
-  alias Ragex.Embeddings.Persistence
+
   alias Ragex.CLI.{Colors, Output, Progress, Prompt}
+  alias Ragex.Embeddings.Persistence
 
   @shortdoc "Clear embedding caches"
 

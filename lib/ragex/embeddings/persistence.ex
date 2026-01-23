@@ -125,6 +125,23 @@ defmodule Ragex.Embeddings.Persistence do
   end
 
   @doc """
+  Returns statistics about the cache (alias for stats/0).
+
+  Provides information about cache file, size, age, and contents.
+
+  ## Returns
+  - `{:ok, stats_map}` - Cache statistics including:
+    - `:cache_path` - Path to the cache file
+    - `:file_size` - Size of the cache file in bytes
+    - `:metadata` - Cache metadata (version, model, dimensions, timestamp, entity count)
+    - `:valid?` - Whether the cache is valid for the current configuration
+  - `{:error, :not_found}` - No cache file exists
+  - `{:error, reason}` - Other error
+  """
+  @spec cache_stats() :: {:ok, map()} | {:error, term()}
+  def cache_stats, do: stats()
+
+  @doc """
   Returns the cache path for the current project.
   """
   def cache_path, do: get_cache_path()

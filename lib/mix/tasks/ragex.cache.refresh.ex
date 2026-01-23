@@ -51,9 +51,9 @@ defmodule Mix.Tasks.Ragex.Cache.Refresh do
 
   use Mix.Task
   alias Ragex.Analyzers.Directory
+  alias Ragex.CLI.{Colors, Output, Progress}
   alias Ragex.Embeddings.{FileTracker, Persistence}
   alias Ragex.Graph.Store
-  alias Ragex.CLI.{Colors, Output, Progress}
 
   require Logger
 

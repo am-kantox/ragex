@@ -34,8 +34,9 @@ defmodule Mix.Tasks.Ragex.Cache.Stats do
   """
 
   use Mix.Task
-  alias Ragex.Embeddings.{Bumblebee, Persistence}
+
   alias Ragex.CLI.{Colors, Output}
+  alias Ragex.Embeddings.{Bumblebee, Persistence}
 
   @shortdoc "Display embedding cache statistics"
 

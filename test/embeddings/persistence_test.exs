@@ -220,6 +220,61 @@ defmodule Ragex.Embeddings.PersistenceTest do
     end
   end
 
+  describe "cache_stats/0" do
+    test "returns same stats as stats/0" do
+      Store.store_embedding(:function, "foo", [0.1], "foo")
+      Store.store_embedding(:module, "Bar", [0.2], "Bar")
+
+      {:ok, _path} = Persistence.save(Store.embeddings_table())
+      {:ok, stats1} = Persistence.stats()
+      {:ok, stats2} = Persistence.cache_stats()
+
+      assert stats1 == stats2
+    end
+
+    test "returns stats for existing cache" do
+      Store.store_embedding(:function, "foo", [0.1], "foo")
+      Store.store_embedding(:module, "Bar", [0.2], "Bar")
+
+      {:ok, path} = Persistence.save(Store.embeddings_table())
+      {:ok, stats} = Persistence.cache_stats()
+
+      assert stats.cache_path == path
+      assert stats.valid? == true
+      assert stats.file_size > 0
+      assert stats.metadata.entity_count == 2
+      assert stats.metadata.model_id == :all_minilm_l6_v2
+    end
+
+    test "returns error for non-existent cache" do
+      assert {:error, :not_found} = Persistence.cache_stats()
+    end
+
+    test "marks incompatible cache as invalid" do
+      Store.store_embedding(:function, "test", [0.1], "test")
+      {:ok, path} = Persistence.save(Store.embeddings_table())
+
+      # Modify metadata to incompatible model
+      {:ok, table} = :ets.file2tab(String.to_charlist(path))
+      [{:__metadata__, metadata}] = :ets.lookup(table, :__metadata__)
+
+      modified_metadata = %{
+        metadata
+        | model_id: :incompatible_model,
+          dimensions: 768
+      }
+
+      :ets.insert(table, {:__metadata__, modified_metadata})
+      :ets.tab2file(table, String.to_charlist(path))
+      :ets.delete(table)
+
+      {:ok, stats} = Persistence.cache_stats()
+      assert stats.valid? == false
+      assert stats.metadata.model_id == :incompatible_model
+      assert stats.metadata.dimensions == 768
+    end
+  end
+
   describe "clear/1" do
     test "clears current project cache" do
       Store.store_embedding(:function, "test", [0.1], "test")

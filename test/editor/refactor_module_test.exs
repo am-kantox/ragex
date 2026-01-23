@@ -1,8 +1,8 @@
 defmodule Ragex.Editor.RefactorModuleTest do
   use ExUnit.Case, async: false
 
+  alias Ragex.Analyzers.Elixir, as: ElixirAnalyzer
   alias Ragex.Editor.Refactor
-  alias Ragex.Editor.Refactor.Elixir, as: ElixirRefactor
   alias Ragex.Graph.Store
 
   setup do
@@ -42,8 +42,8 @@ defmodule Ragex.Editor.RefactorModuleTest do
       File.write!(target_file, target_content)
 
       # Analyze both files
-      {:ok, source_analysis} = Ragex.Analyzers.Elixir.analyze(source_content, source_file)
-      {:ok, target_analysis} = Ragex.Analyzers.Elixir.analyze(target_content, target_file)
+      {:ok, source_analysis} = ElixirAnalyzer.analyze(source_content, source_file)
+      {:ok, target_analysis} = ElixirAnalyzer.analyze(target_content, target_file)
 
       store_analysis(source_analysis)
       store_analysis(target_analysis)
@@ -77,7 +77,7 @@ defmodule Ragex.Editor.RefactorModuleTest do
 
       File.write!(source_file, source_content)
 
-      {:ok, analysis} = Ragex.Analyzers.Elixir.analyze(source_content, source_file)
+      {:ok, analysis} = ElixirAnalyzer.analyze(source_content, source_file)
       store_analysis(analysis)
 
       # Move to new module
@@ -115,8 +115,8 @@ defmodule Ragex.Editor.RefactorModuleTest do
       File.write!(source_file, source_content)
       File.write!(caller_file, caller_content)
 
-      {:ok, source_analysis} = Ragex.Analyzers.Elixir.analyze(source_content, source_file)
-      {:ok, caller_analysis} = Ragex.Analyzers.Elixir.analyze(caller_content, caller_file)
+      {:ok, source_analysis} = ElixirAnalyzer.analyze(source_content, source_file)
+      {:ok, caller_analysis} = ElixirAnalyzer.analyze(caller_content, caller_file)
 
       store_analysis(source_analysis)
       store_analysis(caller_analysis)
@@ -148,7 +148,7 @@ defmodule Ragex.Editor.RefactorModuleTest do
 
       File.write!(source_file, source_content)
 
-      {:ok, analysis} = Ragex.Analyzers.Elixir.analyze(source_content, source_file)
+      {:ok, analysis} = ElixirAnalyzer.analyze(source_content, source_file)
       store_analysis(analysis)
 
       # Extract helpers to new module
@@ -195,7 +195,7 @@ defmodule Ragex.Editor.RefactorModuleTest do
 
       File.write!(source_file, source_content)
 
-      {:ok, analysis} = Ragex.Analyzers.Elixir.analyze(source_content, source_file)
+      {:ok, analysis} = ElixirAnalyzer.analyze(source_content, source_file)
       store_analysis(analysis)
 
       assert {:ok, _result} =
@@ -226,8 +226,8 @@ defmodule Ragex.Editor.RefactorModuleTest do
       File.write!(source_file, source_content)
       File.write!(caller_file, caller_content)
 
-      {:ok, source_analysis} = Ragex.Analyzers.Elixir.analyze(source_content, source_file)
-      {:ok, caller_analysis} = Ragex.Analyzers.Elixir.analyze(caller_content, caller_file)
+      {:ok, source_analysis} = ElixirAnalyzer.analyze(source_content, source_file)
+      {:ok, caller_analysis} = ElixirAnalyzer.analyze(caller_content, caller_file)
 
       store_analysis(source_analysis)
       store_analysis(caller_analysis)
@@ -252,7 +252,7 @@ defmodule Ragex.Editor.RefactorModuleTest do
 
       File.write!(source_file, source_content)
 
-      {:ok, analysis} = Ragex.Analyzers.Elixir.analyze(source_content, source_file)
+      {:ok, analysis} = ElixirAnalyzer.analyze(source_content, source_file)
       store_analysis(analysis)
 
       assert {:ok, _result} =
