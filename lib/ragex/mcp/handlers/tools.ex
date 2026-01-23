@@ -12,7 +12,8 @@ defmodule Ragex.MCP.Handlers.Tools do
     Duplication,
     Impact,
     MetastaticBridge,
-    QualityStore
+    QualityStore,
+    Suggestions
   }
 
   alias Ragex.Analyzers.Directory
@@ -1538,6 +1539,86 @@ defmodule Ragex.MCP.Handlers.Tools do
             },
             required: ["target"]
           }
+        },
+        %{
+          name: "suggest_refactorings",
+          description:
+            "Analyze code and generate prioritized refactoring suggestions using pattern detection and AI - Phase 11G",
+          inputSchema: %{
+            type: "object",
+            properties: %{
+              target: %{
+                type: "string",
+                description:
+                  "Target to analyze: file path, directory path, or module name (format: 'Module' or 'Module.function/arity')"
+              },
+              patterns: %{
+                type: "array",
+                description: "Filter by specific patterns (empty = all patterns)",
+                items: %{
+                  type: "string",
+                  enum: [
+                    "extract_function",
+                    "inline_function",
+                    "split_module",
+                    "merge_modules",
+                    "remove_dead_code",
+                    "reduce_coupling",
+                    "simplify_complexity",
+                    "extract_module"
+                  ]
+                }
+              },
+              min_priority: %{
+                type: "string",
+                description: "Minimum priority level to include",
+                enum: ["info", "low", "medium", "high", "critical"],
+                default: "low"
+              },
+              include_actions: %{
+                type: "boolean",
+                description: "Include action plans with step-by-step instructions",
+                default: true
+              },
+              use_rag: %{
+                type: "boolean",
+                description: "Use RAG for AI-powered advice (requires AI provider)",
+                default: false
+              },
+              format: %{
+                type: "string",
+                description: "Output format",
+                enum: ["summary", "detailed", "json"],
+                default: "summary"
+              }
+            },
+            required: ["target"]
+          }
+        },
+        %{
+          name: "explain_suggestion",
+          description:
+            "Get detailed explanation for a specific refactoring suggestion - Phase 11G",
+          inputSchema: %{
+            type: "object",
+            properties: %{
+              suggestion_id: %{
+                type: "string",
+                description: "ID of the suggestion (from suggest_refactorings response)"
+              },
+              include_code_context: %{
+                type: "boolean",
+                description: "Include relevant code snippets",
+                default: true
+              },
+              use_rag: %{
+                type: "boolean",
+                description: "Generate enhanced explanation using RAG",
+                default: false
+              }
+            },
+            required: ["suggestion_id"]
+          }
         }
       ]
     }
@@ -1710,6 +1791,12 @@ defmodule Ragex.MCP.Handlers.Tools do
 
       "risk_assessment" ->
         risk_assessment_tool(arguments)
+
+      "suggest_refactorings" ->
+        suggest_refactorings_tool(arguments)
+
+      "explain_suggestion" ->
+        explain_suggestion_tool(arguments)
 
       _ ->
         {:error, "Unknown tool: #{tool_name}"}
@@ -5648,4 +5735,189 @@ defmodule Ragex.MCP.Handlers.Tools do
 
   defp format_function_ref({:function, module, name, arity}), do: "#{module}.#{name}/#{arity}"
   defp format_function_ref(other), do: inspect(other)
+
+  # Suggestion tools implementations (Phase 11G)
+
+  defp suggest_refactorings_tool(%{"target" => target_str} = params) do
+    patterns = Map.get(params, "patterns", [])
+    min_priority = Map.get(params, "min_priority", "low") |> String.to_atom()
+    include_actions = Map.get(params, "include_actions", true)
+    use_rag = Map.get(params, "use_rag", false)
+    format = Map.get(params, "format", "summary")
+
+    # Parse target (can be file path, directory, or module reference)
+    target = parse_suggestion_target(target_str)
+
+    opts = [
+      patterns: if(patterns == [], do: :all, else: Enum.map(patterns, &String.to_atom/1)),
+      min_priority: min_priority,
+      include_actions: include_actions,
+      use_rag: use_rag
+    ]
+
+    case Ragex.Analysis.Suggestions.analyze_target(target, opts) do
+      {:ok, result} ->
+        format_suggestions_result(result, format)
+
+      {:error, reason} ->
+        {:error, "Suggestion analysis failed: #{inspect(reason)}"}
+    end
+  end
+
+  defp suggest_refactorings_tool(_), do: {:error, "Missing required 'target' parameter"}
+
+  defp explain_suggestion_tool(%{"suggestion_id" => suggestion_id} = params) do
+    # This is a simplified implementation - in production, you'd need to
+    # maintain a cache of suggestions by ID to look them up
+    {:error,
+     "explain_suggestion requires maintaining suggestion state - use detailed format in suggest_refactorings instead"}
+  end
+
+  defp explain_suggestion_tool(_), do: {:error, "Missing required 'suggestion_id' parameter"}
+
+  defp parse_suggestion_target(target_str) do
+    cond do
+      # File path
+      String.ends_with?(target_str, [".ex", ".exs", ".erl", ".py", ".js", ".ts"]) ->
+        target_str
+
+      # Directory path (contains /)
+      String.contains?(target_str, "/") ->
+        target_str
+
+      # Module or function reference
+      String.contains?(target_str, ".") or String.contains?(target_str, "/") ->
+        case parse_target_string(target_str) do
+          {:ok, parsed} -> parsed
+          _ -> target_str
+        end
+
+      # Module name
+      true ->
+        try do
+          module = String.to_existing_atom("Elixir." <> target_str)
+          {:module, module}
+        rescue
+          ArgumentError -> target_str
+        end
+    end
+  end
+
+  defp format_suggestions_result(result, "json") do
+    {:ok,
+     %{
+       status: "success",
+       target: inspect(result.target),
+       analyzed_at: DateTime.to_iso8601(result.analyzed_at),
+       summary: result.summary,
+       suggestions:
+         Enum.map(result.suggestions, fn sugg ->
+           %{
+             id: sugg.id,
+             pattern: Atom.to_string(sugg.pattern),
+             priority: Atom.to_string(sugg.priority),
+             priority_score: sugg.priority_score,
+             confidence: sugg.confidence,
+             target: sugg.target,
+             reason: sugg.reason,
+             metrics: sugg.metrics,
+             impact: sugg.impact,
+             effort: sugg.effort,
+             benefit: sugg.benefit,
+             rag_advice: sugg.rag_advice,
+             action_plan: sugg.action_plan
+           }
+         end)
+     }}
+  end
+
+  defp format_suggestions_result(result, "detailed") do
+    suggestions_text =
+      result.suggestions
+      |> Enum.map(fn sugg ->
+        action_text =
+          if sugg.action_plan do
+            steps =
+              sugg.action_plan.steps
+              |> Enum.map_join("\n", fn step ->
+                "      #{step.order}. #{step.action} (#{step.estimated_time})"
+              end)
+
+            "\n    Action Plan (#{sugg.action_plan.total_steps} steps):\n#{steps}"
+          else
+            ""
+          end
+
+        rag_text =
+          if sugg.rag_advice do
+            "\n    AI Advice:\n      #{sugg.rag_advice}"
+          else
+            ""
+          end
+
+        """
+        #{sugg.id}
+          Pattern: #{sugg.pattern}
+          Priority: #{sugg.priority} (score: #{sugg.priority_score})
+          Confidence: #{Float.round(sugg.confidence, 2)}
+          Reason: #{sugg.reason}
+          Benefit: #{sugg.benefit}#{action_text}#{rag_text}
+        """
+      end)
+      |> Enum.join("\n")
+
+    content = """
+    Refactoring Suggestions
+    ======================
+    Target: #{inspect(result.target)}
+    Total Suggestions: #{result.summary.total}
+    Average Score: #{result.summary.average_score}
+
+    By Priority:
+    #{format_priority_counts(result.summary.by_priority)}
+
+    By Pattern:
+    #{format_pattern_counts(result.summary.by_pattern)}
+
+    Suggestions:
+    #{suggestions_text}
+    """
+
+    {:ok, %{status: "success", content: String.trim(content)}}
+  end
+
+  defp format_suggestions_result(result, "summary") do
+    top_suggestions =
+      result.suggestions
+      |> Enum.take(5)
+      |> Enum.map_join("\n", fn sugg ->
+        "  - [#{sugg.priority}] #{sugg.pattern}: #{sugg.reason}"
+      end)
+
+    content = """
+    Suggestions for #{inspect(result.target)}
+    Total: #{result.summary.total} | Avg Score: #{result.summary.average_score}
+    High Priority: #{Map.get(result.summary.by_priority, :critical, 0) + Map.get(result.summary.by_priority, :high, 0)}
+
+    Top Suggestions:
+    #{top_suggestions}
+    """
+
+    {:ok, %{status: "success", summary: String.trim(content)}}
+  end
+
+  defp format_priority_counts(counts) do
+    [:critical, :high, :medium, :low, :info]
+    |> Enum.map_join("\n", fn priority ->
+      count = Map.get(counts, priority, 0)
+      "  #{priority}: #{count}"
+    end)
+  end
+
+  defp format_pattern_counts(counts) do
+    counts
+    |> Enum.map_join("\n", fn {pattern, count} ->
+      "  #{pattern}: #{count}"
+    end)
+  end
 end
