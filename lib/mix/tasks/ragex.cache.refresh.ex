@@ -53,6 +53,7 @@ defmodule Mix.Tasks.Ragex.Cache.Refresh do
   alias Ragex.Analyzers.Directory
   alias Ragex.Embeddings.{FileTracker, Persistence}
   alias Ragex.Graph.Store
+  alias Ragex.CLI.{Colors, Output, Progress}
 
   require Logger
 
@@ -75,11 +76,20 @@ defmodule Mix.Tasks.Ragex.Cache.Refresh do
 
     mode = if force_refresh, do: "full", else: "incremental"
 
-    IO.puts("\nRefreshing embeddings cache (#{mode} mode)...")
-    IO.puts("Path: #{path}\n")
+    Output.section("Refreshing Embeddings Cache")
+
+    Output.key_value([
+      {"Mode", Colors.info(mode)},
+      {"Path", path}
+    ])
+
+    IO.puts("")
 
     # Get initial stats
     initial_stats = get_stats()
+
+    # Show spinner for analysis
+    spinner = Progress.spinner(label: "Analyzing files...")
 
     # Perform refresh
     start_time = System.monotonic_time(:millisecond)
@@ -93,19 +103,25 @@ defmodule Mix.Tasks.Ragex.Cache.Refresh do
     end_time = System.monotonic_time(:millisecond)
     duration_ms = end_time - start_time
 
+    # Stop spinner
+    Progress.stop_spinner(spinner)
+
     case result do
       {:ok, summary} ->
         display_summary(summary, duration_ms, mode)
 
         # Save cache
-        IO.puts("\nSaving cache...")
+        save_spinner = Progress.spinner(label: "Saving cache...")
 
         case Persistence.save() do
           {:ok, cache_path} ->
-            IO.puts("✓ Cache saved to #{cache_path}")
+            Progress.stop_spinner(save_spinner, Colors.success("✓ Cache saved to #{cache_path}"))
 
           {:error, reason} ->
-            IO.puts("✗ Failed to save cache: #{inspect(reason)}")
+            Progress.stop_spinner(
+              save_spinner,
+              Colors.error("✗ Failed to save cache: #{inspect(reason)}")
+            )
         end
 
         # Show detailed stats if requested
@@ -114,40 +130,66 @@ defmodule Mix.Tasks.Ragex.Cache.Refresh do
           display_detailed_stats(initial_stats, final_stats)
         end
 
-        IO.puts("\n✓ Refresh complete!")
+        IO.puts(Colors.success("\n✓ Refresh complete!"))
 
       {:error, reason} ->
-        IO.puts("✗ Failed to refresh cache: #{inspect(reason)}")
+        Progress.stop_spinner(spinner, Colors.error("✗ Failed"))
+        IO.puts(Colors.error("Failed to refresh cache: #{inspect(reason)}"))
     end
   end
 
   defp display_summary(summary, duration_ms, mode) do
-    IO.puts("Results:")
-    IO.puts("  Total files: #{summary.total}")
+    IO.puts("\n" <> Colors.bold("Results:"))
 
-    if mode == "incremental" do
-      IO.puts("  Analyzed: #{summary.analyzed}")
-      IO.puts("  Skipped (unchanged): #{summary.skipped}")
+    result_pairs = [{"Total files", summary.total}]
 
-      if summary.analyzed > 0 do
-        regeneration_pct = (summary.analyzed / summary.total * 100) |> Float.round(1)
-        IO.puts("  Regeneration: #{regeneration_pct}%")
+    result_pairs =
+      if mode == "incremental" do
+        result_pairs ++
+          [
+            {"Analyzed", Colors.highlight(to_string(summary.analyzed))},
+            {"Skipped", Colors.muted(to_string(summary.skipped))}
+          ]
+      else
+        result_pairs
       end
-    end
 
-    IO.puts("  Success: #{summary.success}")
-    IO.puts("  Errors: #{summary.errors}")
+    regeneration_pct =
+      if mode == "incremental" and summary.analyzed > 0 do
+        (summary.analyzed / summary.total * 100) |> Float.round(1)
+      else
+        nil
+      end
+
+    result_pairs =
+      result_pairs ++
+        [
+          {"Success", Colors.success(to_string(summary.success))},
+          {"Errors",
+           if(summary.errors > 0, do: Colors.error(to_string(summary.errors)), else: "0")}
+        ]
+
+    result_pairs =
+      if regeneration_pct do
+        result_pairs ++ [{"Regeneration", "#{regeneration_pct}%"}]
+      else
+        result_pairs
+      end
+
+    duration_sec = duration_ms / 1000
+    result_pairs = result_pairs ++ [{"Duration", "#{Float.round(duration_sec, 2)}s"}]
+
+    Output.key_value(result_pairs, indent: 2)
 
     if summary.errors > 0 do
-      IO.puts("\nErrors:")
+      IO.puts("\n" <> Colors.error("Errors:"))
 
       Enum.each(summary.error_details, fn error ->
-        IO.puts("  - #{error.file}: #{inspect(error.reason)}")
+        IO.puts("  #{Colors.error("✗")} #{error.file}: #{Colors.muted(inspect(error.reason))}")
       end)
     end
 
-    duration_sec = duration_ms / 1000
-    IO.puts("\nTime: #{Float.round(duration_sec, 2)}s")
+    IO.puts("")
   end
 
   defp get_stats do
@@ -158,42 +200,64 @@ defmodule Mix.Tasks.Ragex.Cache.Refresh do
   end
 
   defp display_detailed_stats(initial, final) do
-    IO.puts("\n" <> String.duplicate("=", 50))
-    IO.puts("Detailed Statistics")
-    IO.puts(String.duplicate("=", 50))
+    Output.section("Detailed Statistics")
 
     # Graph stats
-    IO.puts("\nGraph Store:")
-    IO.puts("  Nodes: #{initial.graph.nodes} → #{final.graph.nodes}")
-    IO.puts("  Edges: #{initial.graph.edges} → #{final.graph.edges}")
-    IO.puts("  Embeddings: #{initial.graph.embeddings} → #{final.graph.embeddings}")
+    IO.puts(Colors.bold("Graph Store:"))
+
+    Output.key_value(
+      [
+        {"Nodes", "#{initial.graph.nodes} → #{Colors.highlight(to_string(final.graph.nodes))}"},
+        {"Edges", "#{initial.graph.edges} → #{Colors.highlight(to_string(final.graph.edges))}"},
+        {"Embeddings",
+         "#{initial.graph.embeddings} → #{Colors.highlight(to_string(final.graph.embeddings))}"}
+      ],
+      indent: 2
+    )
+
+    IO.puts("")
 
     # File tracker stats
-    IO.puts("\nFile Tracker:")
-    IO.puts("  Total files: #{final.file_tracker.total_files}")
-    IO.puts("  Changed: #{final.file_tracker.changed_files}")
-    IO.puts("  Unchanged: #{final.file_tracker.unchanged_files}")
-    IO.puts("  Deleted: #{final.file_tracker.deleted_files}")
-    IO.puts("  Total entities: #{final.file_tracker.total_entities}")
-    IO.puts("  Stale entities: #{final.file_tracker.stale_entities}")
+    IO.puts(Colors.bold("File Tracker:"))
+
+    Output.key_value(
+      [
+        {"Total files", final.file_tracker.total_files},
+        {"Changed", Colors.info(to_string(final.file_tracker.changed_files))},
+        {"Unchanged", Colors.muted(to_string(final.file_tracker.unchanged_files))},
+        {"Deleted", final.file_tracker.deleted_files},
+        {"Total entities", final.file_tracker.total_entities},
+        {"Stale entities", final.file_tracker.stale_entities}
+      ],
+      indent: 2
+    )
+
+    IO.puts("")
 
     # Cache info
     case Persistence.stats() do
       {:ok, cache_stats} ->
-        IO.puts("\nCache:")
-        IO.puts("  Size: #{format_bytes(cache_stats.file_size)}")
-        IO.puts("  Valid: #{cache_stats.valid?}")
-        IO.puts("  Model: #{cache_stats.metadata.model_id}")
-        IO.puts("  Dimensions: #{cache_stats.metadata.dimensions}")
+        IO.puts(Colors.bold("Cache:"))
+
+        Output.key_value(
+          [
+            {"Size", format_bytes(cache_stats.file_size)},
+            {"Valid",
+             if(cache_stats.valid?, do: Colors.success("Yes"), else: Colors.error("No"))},
+            {"Model", cache_stats.metadata.model_id},
+            {"Dimensions", cache_stats.metadata.dimensions}
+          ],
+          indent: 2
+        )
 
       {:error, :not_found} ->
-        IO.puts("\nCache: Not found")
+        IO.puts(Colors.warning("Cache: Not found"))
 
       {:error, _} ->
-        IO.puts("\nCache: Error reading cache")
+        IO.puts(Colors.error("Cache: Error reading cache"))
     end
 
-    IO.puts(String.duplicate("=", 50))
+    IO.puts("")
   end
 
   defp format_bytes(bytes) when bytes < 1024, do: "#{bytes} B"

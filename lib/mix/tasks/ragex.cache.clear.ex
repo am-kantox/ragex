@@ -28,6 +28,7 @@ defmodule Mix.Tasks.Ragex.Cache.Clear do
 
   use Mix.Task
   alias Ragex.Embeddings.Persistence
+  alias Ragex.CLI.{Colors, Output, Progress, Prompt}
 
   @shortdoc "Clear embedding caches"
 
@@ -49,38 +50,45 @@ defmodule Mix.Tasks.Ragex.Cache.Clear do
         clear_older_than(opts[:older_than], opts[:force])
 
       true ->
-        IO.puts("Error: Please specify --current, --all, or --older-than")
+        IO.puts(Colors.error("Error: Please specify --current, --all, or --older-than"))
 
         IO.puts(
-          "\nUsage: mix ragex.cache.clear [--current | --all | --older-than DAYS] [--force]"
+          Colors.muted(
+            "\nUsage: mix ragex.cache.clear [--current | --all | --older-than DAYS] [--force]"
+          )
         )
 
-        IO.puts("\nRun `mix help ragex.cache.clear` for more information.")
+        IO.puts(Colors.muted("Run `mix help ragex.cache.clear` for more information."))
     end
   end
 
   defp clear_current(force) do
-    IO.puts("\nClearing cache for current project...")
+    Output.section("Clear Current Project Cache")
 
     case Persistence.stats() do
       {:ok, stats} ->
         if force or confirm_clear(stats) do
+          spinner = Progress.spinner(label: "Clearing cache...")
           :ok = Persistence.clear(:current)
-          IO.puts("✓ Cache cleared successfully\n")
+          Progress.stop_spinner(spinner, Colors.success("✓ Cache cleared successfully"))
+          IO.puts("")
         else
-          IO.puts("Cancelled.\n")
+          IO.puts(Colors.muted("Cancelled."))
+          IO.puts("")
         end
 
       {:error, :not_found} ->
-        IO.puts("No cache found for current project.\n")
+        IO.puts(Colors.warning("No cache found for current project."))
+        IO.puts("")
 
       {:error, reason} ->
-        IO.puts("Error: #{inspect(reason)}\n")
+        IO.puts(Colors.error("Error: #{inspect(reason)}"))
+        IO.puts("")
     end
   end
 
   defp clear_all(force) do
-    IO.puts("\nClearing all Ragex caches...")
+    Output.section("Clear All Ragex Caches")
 
     cache_root = Path.join(System.user_home!(), ".cache/ragex")
 
@@ -89,27 +97,38 @@ defmodule Mix.Tasks.Ragex.Cache.Clear do
       count = length(cache_dirs)
 
       if count == 0 do
-        IO.puts("No caches found.\n")
+        IO.puts(Colors.muted("No caches found."))
+        IO.puts("")
       else
         {total_count, total_size} = calculate_all_cache_stats(cache_root, cache_dirs)
 
-        IO.puts("\nFound #{total_count} cache(s):")
-        IO.puts("  Total size: #{format_bytes(total_size)}")
+        Output.key_value([
+          {"Caches found", Colors.info(to_string(total_count))},
+          {"Total size", format_bytes(total_size)}
+        ])
+
+        IO.puts("")
 
         if force or confirm_clear_all(total_count, total_size) do
+          spinner = Progress.spinner(label: "Clearing all caches...")
           :ok = Persistence.clear(:all)
-          IO.puts("\n✓ All caches cleared successfully\n")
+          Progress.stop_spinner(spinner, Colors.success("✓ All caches cleared successfully"))
+          IO.puts("")
         else
-          IO.puts("Cancelled.\n")
+          IO.puts(Colors.muted("Cancelled."))
+          IO.puts("")
         end
       end
     else
-      IO.puts("No cache directory found.\n")
+      IO.puts(Colors.muted("No cache directory found."))
+      IO.puts("")
     end
   end
 
   defp clear_older_than(days, force) when days > 0 do
-    IO.puts("\nClearing caches older than #{days} day(s)...")
+    Output.section("Clear Old Caches")
+    IO.puts(Colors.info("Looking for caches older than #{days} day(s)..."))
+    IO.puts("")
 
     cache_root = Path.join(System.user_home!(), ".cache/ragex")
 
@@ -118,28 +137,38 @@ defmodule Mix.Tasks.Ragex.Cache.Clear do
       old_caches = find_old_caches(cache_root, cutoff_time)
 
       if Enum.empty?(old_caches) do
-        IO.puts("No caches older than #{days} day(s) found.\n")
+        IO.puts(Colors.success("No caches older than #{days} day(s) found."))
+        IO.puts("")
       else
         count = length(old_caches)
         total_size = Enum.reduce(old_caches, 0, fn {_, size, _}, acc -> acc + size end)
 
-        IO.puts("\nFound #{count} old cache(s):")
-        IO.puts("  Total size: #{format_bytes(total_size)}")
+        Output.key_value([
+          {"Old caches found", Colors.warning(to_string(count))},
+          {"Total size", format_bytes(total_size)}
+        ])
+
+        IO.puts("")
 
         if force or confirm_clear_old(count, total_size, days) do
+          spinner = Progress.spinner(label: "Clearing old caches...")
           :ok = Persistence.clear({:older_than, days})
-          IO.puts("\n✓ Old caches cleared successfully\n")
+          Progress.stop_spinner(spinner, Colors.success("✓ Old caches cleared successfully"))
+          IO.puts("")
         else
-          IO.puts("Cancelled.\n")
+          IO.puts(Colors.muted("Cancelled."))
+          IO.puts("")
         end
       end
     else
-      IO.puts("No cache directory found.\n")
+      IO.puts(Colors.muted("No cache directory found."))
+      IO.puts("")
     end
   end
 
   defp clear_older_than(_days, _force) do
-    IO.puts("Error: --older-than requires a positive number of days\n")
+    IO.puts(Colors.error("Error: --older-than requires a positive number of days"))
+    IO.puts("")
   end
 
   defp calculate_all_cache_stats(cache_root, cache_dirs) do
@@ -177,37 +206,34 @@ defmodule Mix.Tasks.Ragex.Cache.Clear do
   end
 
   defp confirm_clear(stats) do
-    IO.puts("\nCache information:")
-    IO.puts("  Model: #{stats.metadata[:model_id]}")
-    IO.puts("  Entities: #{stats.metadata[:entity_count]}")
-    IO.puts("  Size: #{format_bytes(stats.file_size)}")
+    IO.puts(Colors.bold("Cache Information:"))
 
-    IO.gets("\nAre you sure you want to clear this cache? [y/N] ")
-    |> String.trim()
-    |> String.downcase()
-    |> Kernel.==("y")
+    Output.key_value(
+      [
+        {"Model", stats.metadata[:model_id]},
+        {"Entities", stats.metadata[:entity_count]},
+        {"Size", format_bytes(stats.file_size)}
+      ],
+      indent: 2
+    )
+
+    IO.puts("")
+
+    Prompt.confirm("Are you sure you want to clear this cache?", default: :no)
   end
 
   defp confirm_clear_all(count, total_size) do
-    IO.puts("")
-
-    IO.gets(
-      "Are you sure you want to clear all #{count} cache(s) (#{format_bytes(total_size)})? [y/N] "
+    Prompt.confirm(
+      "Are you sure you want to clear all #{count} cache(s) (#{format_bytes(total_size)})?",
+      default: :no
     )
-    |> String.trim()
-    |> String.downcase()
-    |> Kernel.==("y")
   end
 
   defp confirm_clear_old(count, total_size, days) do
-    IO.puts("")
-
-    IO.gets(
-      "Are you sure you want to clear #{count} cache(s) older than #{days} day(s) (#{format_bytes(total_size)})? [y/N] "
+    Prompt.confirm(
+      "Are you sure you want to clear #{count} cache(s) older than #{days} day(s) (#{format_bytes(total_size)})?",
+      default: :no
     )
-    |> String.trim()
-    |> String.downcase()
-    |> Kernel.==("y")
   end
 
   defp format_bytes(bytes) when bytes < 1024, do: "#{bytes} B"

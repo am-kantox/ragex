@@ -35,6 +35,7 @@ defmodule Mix.Tasks.Ragex.Cache.Stats do
 
   use Mix.Task
   alias Ragex.Embeddings.{Bumblebee, Persistence}
+  alias Ragex.CLI.{Colors, Output}
 
   @shortdoc "Display embedding cache statistics"
 
@@ -50,41 +51,48 @@ defmodule Mix.Tasks.Ragex.Cache.Stats do
   end
 
   defp show_current_cache do
-    IO.puts("\nRagex Embedding Cache Statistics")
-    IO.puts("================================\n")
+    Output.section("Ragex Embedding Cache Statistics")
 
     case Persistence.stats() do
       {:ok, stats} ->
         display_stats(stats)
 
       {:error, :not_found} ->
-        IO.puts("Status: No cache found")
-        IO.puts("\nThe cache will be created after the first indexing operation.")
+        IO.puts(Colors.warning("Status: No cache found"))
+        IO.puts(Colors.muted("\nThe cache will be created after the first indexing operation."))
 
       {:error, reason} ->
-        IO.puts("Status: Error - #{inspect(reason)}")
+        IO.puts(Colors.error("Status: Error - #{inspect(reason)}"))
     end
   end
 
   defp show_all_caches do
-    IO.puts("\nAll Ragex Embedding Caches")
-    IO.puts("==========================\n")
+    Output.section("All Ragex Embedding Caches")
 
     cache_root = Path.join(System.user_home!(), ".cache/ragex")
 
     if File.exists?(cache_root) do
-      cache_root
-      |> File.ls!()
-      |> Enum.each(fn project_hash ->
-        project_dir = Path.join(cache_root, project_hash)
-        cache_file = Path.join(project_dir, "embeddings.ets")
+      caches =
+        cache_root
+        |> File.ls!()
+        |> Enum.filter(fn project_hash ->
+          cache_file = Path.join([cache_root, project_hash, "embeddings.ets"])
+          File.exists?(cache_file)
+        end)
 
-        if File.exists?(cache_file) do
+      if Enum.empty?(caches) do
+        IO.puts(Colors.muted("No caches found."))
+      else
+        IO.puts(Colors.info("Found #{length(caches)} cache(s):\n"))
+
+        Enum.each(caches, fn project_hash ->
+          project_dir = Path.join(cache_root, project_hash)
+          cache_file = Path.join(project_dir, "embeddings.ets")
           display_cache_entry(project_hash, cache_file)
-        end
-      end)
+        end)
+      end
     else
-      IO.puts("No caches found. Cache directory does not exist yet.")
+      IO.puts(Colors.muted("No caches found. Cache directory does not exist yet."))
     end
   end
 
@@ -104,61 +112,106 @@ defmodule Mix.Tasks.Ragex.Cache.Stats do
 
         :ets.delete(table)
 
-        IO.puts("Project Hash: #{project_hash}")
-        IO.puts("  Model: #{metadata[:model_id] || "unknown"}")
-        IO.puts("  Entities: #{metadata[:entity_count] || 0}")
-        IO.puts("  Size: #{size}")
-        IO.puts("  Modified: #{modified}\n")
+        IO.puts(Colors.bold("Project: #{String.slice(project_hash, 0..7)}"))
+
+        Output.key_value(
+          [
+            {"Model", metadata[:model_id] || "unknown"},
+            {"Entities", format_number(metadata[:entity_count] || 0)},
+            {"Size", size},
+            {"Modified", modified}
+          ],
+          indent: 2
+        )
+
+        IO.puts("")
 
       {:error, _} ->
-        IO.puts("Project Hash: #{project_hash}")
-        IO.puts("  Size: #{size}")
-        IO.puts("  Modified: #{modified}")
-        IO.puts("  Status: Corrupt or incompatible\n")
+        IO.puts(Colors.bold("Project: #{String.slice(project_hash, 0..7)}"))
+
+        Output.key_value(
+          [
+            {"Size", size},
+            {"Modified", modified},
+            {"Status", Colors.error("Corrupt or incompatible")}
+          ],
+          indent: 2
+        )
+
+        IO.puts("")
     end
   end
 
   defp display_stats(stats) do
     cache_dir = Path.dirname(stats.cache_path)
-    status = if stats.valid?, do: "Valid", else: "Incompatible with current model"
+    status = if stats.valid?, do: Colors.success("Valid"), else: Colors.error("Incompatible")
 
-    IO.puts("Cache Directory: #{cache_dir}")
-    IO.puts("Status: #{status}\n")
+    Output.key_value([
+      {"Cache Directory", cache_dir},
+      {"Status", status}
+    ])
+
+    IO.puts("")
 
     if stats.metadata do
       meta = stats.metadata
-      IO.puts("Metadata:")
-      IO.puts("  Model: #{meta[:model_id]}")
-      IO.puts("  Dimensions: #{meta[:dimensions]}")
-      IO.puts("  Version: #{meta[:version]}")
-      IO.puts("  Created: #{format_datetime(meta[:timestamp])}")
-      IO.puts("  Entity Count: #{format_number(meta[:entity_count])}\n")
+      IO.puts(Colors.bold("Metadata:"))
+
+      Output.key_value(
+        [
+          {"Model", meta[:model_id]},
+          {"Dimensions", meta[:dimensions]},
+          {"Version", meta[:version]},
+          {"Created", format_datetime(meta[:timestamp])},
+          {"Entity Count", Colors.highlight(format_number(meta[:entity_count]))}
+        ],
+        indent: 2
+      )
+
+      IO.puts("")
     end
 
     if stats.file_size do
-      IO.puts("Disk Usage:")
-      IO.puts("  Cache Size: #{format_bytes(stats.file_size)}")
+      IO.puts(Colors.bold("Disk Usage:"))
+
+      disk_usage = [
+        {"Cache Size", format_bytes(stats.file_size)}
+      ]
 
       # Calculate total disk usage across all caches
       cache_root = Path.join(System.user_home!(), ".cache/ragex")
 
-      if File.exists?(cache_root) do
-        {cache_count, total_size} = calculate_total_cache_usage(cache_root)
-        IO.puts("  Total Ragex Caches: #{cache_count}")
-        IO.puts("  Total Disk Usage: #{format_bytes(total_size)}")
-      end
+      disk_usage =
+        if File.exists?(cache_root) do
+          {cache_count, total_size} = calculate_total_cache_usage(cache_root)
 
+          disk_usage ++
+            [
+              {"Total Caches", cache_count},
+              {"Total Size", format_bytes(total_size)}
+            ]
+        else
+          disk_usage
+        end
+
+      Output.key_value(disk_usage, indent: 2)
       IO.puts("")
     end
 
     unless stats.valid? do
       IO.puts(
-        "⚠️  Cache is incompatible with the current embedding model (#{Bumblebee.model_info().id})."
+        Colors.warning(
+          "⚠  Cache is incompatible with the current embedding model (#{Bumblebee.model_info().id})."
+        )
       )
 
       IO.puts(
-        "   Run `mix ragex.cache.clear --current` to remove it, or change your model configuration."
+        Colors.muted(
+          "   Run `mix ragex.cache.clear --current` to remove it, or change your model configuration."
+        )
       )
+
+      IO.puts("")
     end
   end
 
