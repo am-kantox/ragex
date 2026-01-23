@@ -144,7 +144,8 @@ end
    - Dead code detection (graph-based + intraprocedural)
    - Dependency analysis and coupling metrics
    - Impact analysis (risk scoring, test discovery, effort estimation)
-   - MCP tools for all analysis features (13 total)
+   - Automated refactoring suggestions (pattern detection, priority ranking, action plans, RAG-powered advice)
+   - MCP tools for all analysis features (15 total)
 
 ## Development Practices
 
@@ -218,10 +219,19 @@ end
   - Week 4 Day 3: MCP tools implementation (analyze_impact, estimate_refactoring_effort, risk_assessment)
   - Week 4 Day 3: Comprehensive testing (35 tests for Impact Analysis, all passing)
   - Week 4 Day 3: Documentation (256 lines in ANALYSIS.md, 58 lines in README.md)
-  - Modules: `lib/ragex/analysis/{duplication,dead_code,dependency_graph,impact}.ex`
-  - MCP Tools: 13 total (find_duplicates, find_similar_code, find_dead_code, analyze_dead_code_patterns, analyze_dependencies, find_circular_dependencies, coupling_report, analyze_quality, quality_report, find_complex_code, analyze_impact, estimate_refactoring_effort, risk_assessment)
-  - Testing: 694 tests total, 0 failures, 25 skipped
-  - Documentation: Comprehensive ANALYSIS.md guide (900+ lines)
+  - **Phase 11G**: Automated Refactoring Suggestions (Complete)
+    - Modules: `lib/ragex/analysis/suggestions.ex`, `lib/ragex/analysis/suggestions/{patterns,ranker,actions,rag_advisor}.ex` (~2,150 lines)
+    - 8 refactoring patterns: extract_function, inline_function, split_module, merge_modules, remove_dead_code, reduce_coupling, simplify_complexity, extract_module
+    - Priority ranking algorithm with multi-factor scoring (benefit, impact, risk, effort, confidence)
+    - Step-by-step action plans with MCP tool integration
+    - RAG-powered context-aware advice for each pattern
+    - MCP Tools: 2 new (suggest_refactorings, explain_suggestion) - total now 15
+    - Testing: 27 new tests (all passing) - total now 721 tests
+    - Documentation: SUGGESTIONS.md (578 lines)
+  - All Modules: `lib/ragex/analysis/{duplication,dead_code,dependency_graph,impact,suggestions}.ex` + 4 suggestions submodules
+  - All MCP Tools: 15 total (find_duplicates, find_similar_code, find_dead_code, analyze_dead_code_patterns, analyze_dependencies, find_circular_dependencies, coupling_report, analyze_quality, quality_report, find_complex_code, analyze_impact, estimate_refactoring_effort, risk_assessment, suggest_refactorings, explain_suggestion)
+  - Total Testing: 721 tests, 0 failures, 25 skipped
+  - Documentation: Comprehensive ANALYSIS.md guide (900+ lines), SUGGESTIONS.md (578 lines)
 
 ### In Progress 🚧
 
@@ -698,6 +708,6 @@ For architectural decisions or complex changes:
 
 ---
 
-**Last Updated**: January 1, 2026  
+**Last Updated**: January 23, 2026  
 **Ragex Version**: 0.2.0  
-**Status**: Production-ready (Phases 1-5, 8 complete)
+**Status**: Production-ready (Phases 1-5, 8, 10A, 10C, 11 complete)
