@@ -140,7 +140,7 @@ Ragex is an MCP (Model Context Protocol) server that analyzes codebases using co
       ▹ Scope Control: Module-level or project-wide refactoring  
       ▹ MCP Integration: `refactor_code` tool for semantic refactoring
 
-    ▸ Advanced Refactoring (Phase 10A)  
+    ▸ Advanced Refactoring
       ▹ Extract Function: Extract code range into new function (basic support)  
       ▹ Inline Function: Replace all calls with function body, remove definition (fully working)  
       ▹ Convert Visibility: Toggle between `def` and `defp` (fully working)  
@@ -205,7 +205,7 @@ Ragex is an MCP (Model Context Protocol) server that analyzes codebases using co
       ▹ Documentation: See [PROMPTS.md](PROMPTS.md)
 </details>
 <details>
-  <summary>RAG System (NEW - January 22, 2026)</summary>
+  <summary>RAG System (:fire:)</summary>
 
     ▸ AI Provider Abstraction  
       ▹ Provider Behaviour: Clean interface for multiple AI providers  
@@ -259,7 +259,6 @@ Ragex is an MCP (Model Context Protocol) server that analyzes codebases using co
       ▹ `get_ai_cache_stats`: View cache performance metrics  
       ▹ `clear_ai_cache`: Clear cache via MCP  
       ▹ Provider Override: Select provider per-query (openai, anthropic, deepseek_r1, ollama)  
-      ▹ Documentation: See [RAG_IMPLEMENTATION_SUMMARY.md](RAG_IMPLEMENTATION_SUMMARY.md) and [STREAMING.md](STREAMING.md)
 
     ▸ MetaAST-Enhanced Retrieval
       ▹ Context-Aware Ranking: Query intent detection (explain, refactor, example, debug)  
@@ -272,7 +271,7 @@ Ragex is an MCP (Model Context Protocol) server that analyzes codebases using co
       ▹ MCP Tools: `metaast_search`, `cross_language_alternatives`, `expand_query`, `find_metaast_pattern`  
 </details>
 <details>
-  <summary>Code Analysis & Quality (Phase 11 - January 23, 2026)</summary>
+  <summary>Code Analysis & Quality</summary>
 
     ▸ Dead Code Detection  
       ▹ Graph-Based Analysis: Find unused functions via call graph traversal  
@@ -302,7 +301,7 @@ Ragex is an MCP (Model Context Protocol) server that analyzes codebases using co
       ▹ Reports: Summary, detailed, and JSON formats  
       ▹ MCP Tools: `find_duplicates`, `find_similar_code`
 
-    ▸ Impact Analysis (Phase 11 Week 4)  
+    ▸ Impact Analysis
       ▹ Change Impact: Predict affected code via graph traversal  
       ▹ Risk Scoring: Combine importance (PageRank) + coupling + complexity  
       ▹ Test Discovery: Find affected tests automatically  
@@ -335,7 +334,7 @@ Ragex is an MCP (Model Context Protocol) server that analyzes codebases using co
 - [x] Streaming RAG responses
 - [x] MCP streaming notifications
 - [x] MetaAST-enhanced retrieval
-- [x] Code quality analysis (Phase 11)
+- [x] Code quality analysis
 - [x] Impact analysis and risk assessment
 - [ ] Provider health checks and auto-failover
 - [ ] Production optimizations
@@ -998,15 +997,13 @@ RAG tools require the `DEEPSEEK_API_KEY` environment variable:
 export DEEPSEEK_API_KEY="sk-xxxxxxxxxxxxx"
 ```
 
-See [RAG_IMPLEMENTATION_SUMMARY.md](RAG_IMPLEMENTATION_SUMMARY.md) for detailed configuration and usage.
-
 ## Documentation
 
 - [Algorithms](stuff/docs/ALGORITHMS.md) - Algorithms used
 - [Usage](stuff/docs/USAGE.md) - Tips on how to use `Ragex`
 - [Configuration](stuff/docs/CONFIGURATION.md) - Embedding model configuration and migration
 - [Persistence](stuff/docs/PERSISTENCE.md) - Embedding cache management and performance
-- [RAG Implementation](RAG_IMPLEMENTATION_SUMMARY.md) - RAG system architecture and usage (NEW)
+- [Analysis](stuff/docs/ANALYSIS.md) - Embedding cache management and performance
 
 ### Cache Management
 
