@@ -5,7 +5,7 @@ defmodule Ragex.MCP.Handlers.Tools do
   Implements the tools/list and tools/call methods.
   """
   alias Ragex.AI.{Cache, Usage}
-  alias Ragex.Analysis.{MetastaticBridge, QualityStore}
+  alias Ragex.Analysis.{DeadCode, DependencyGraph, MetastaticBridge, QualityStore}
   alias Ragex.Analyzers.Directory
   alias Ragex.Analyzers.Elixir, as: ElixirAnalyzer
   alias Ragex.Analyzers.Erlang, as: ErlangAnalyzer
@@ -1223,6 +1223,127 @@ defmodule Ragex.MCP.Handlers.Tools do
               }
             }
           }
+        },
+        %{
+          name: "analyze_dependencies",
+          description:
+            "Analyze module dependencies - shows coupling metrics, circular dependencies, and dependency relationships",
+          inputSchema: %{
+            type: "object",
+            properties: %{
+              module: %{
+                type: "string",
+                description:
+                  "Module name to analyze (optional - if not provided, analyzes all modules)"
+              },
+              include_transitive: %{
+                type: "boolean",
+                description: "Include transitive dependencies (dependencies of dependencies)",
+                default: false
+              },
+              format: %{
+                type: "string",
+                description: "Output format",
+                enum: ["summary", "detailed", "json"],
+                default: "summary"
+              }
+            }
+          }
+        },
+        %{
+          name: "find_circular_dependencies",
+          description:
+            "Find circular dependencies in the codebase - helps identify architectural issues",
+          inputSchema: %{
+            type: "object",
+            properties: %{
+              scope: %{
+                type: "string",
+                description: "Analysis scope",
+                enum: ["module", "function"],
+                default: "module"
+              },
+              min_cycle_length: %{
+                type: "integer",
+                description: "Minimum cycle length to report",
+                default: 2
+              },
+              limit: %{
+                type: "integer",
+                description: "Maximum number of cycles to return",
+                default: 100
+              }
+            }
+          }
+        },
+        %{
+          name: "find_dead_code",
+          description:
+            "Find potentially unused code (functions with no callers) - includes confidence scoring to distinguish callbacks from truly dead code",
+          inputSchema: %{
+            type: "object",
+            properties: %{
+              scope: %{
+                type: "string",
+                description: "Analysis scope",
+                enum: ["exports", "private", "all", "modules"],
+                default: "all"
+              },
+              min_confidence: %{
+                type: "number",
+                description: "Minimum confidence threshold (0.0-1.0)",
+                default: 0.5
+              },
+              exclude_tests: %{
+                type: "boolean",
+                description: "Exclude test modules from analysis",
+                default: true
+              },
+              include_callbacks: %{
+                type: "boolean",
+                description: "Include potential callbacks (GenServer, Phoenix, etc.)",
+                default: false
+              },
+              format: %{
+                type: "string",
+                description: "Output format",
+                enum: ["summary", "detailed", "suggestions"],
+                default: "summary"
+              }
+            }
+          }
+        },
+        %{
+          name: "coupling_report",
+          description:
+            "Generate coupling metrics report - shows afferent/efferent coupling and instability for all modules",
+          inputSchema: %{
+            type: "object",
+            properties: %{
+              format: %{
+                type: "string",
+                description: "Output format",
+                enum: ["text", "json", "markdown"],
+                default: "text"
+              },
+              sort_by: %{
+                type: "string",
+                description: "Sort modules by metric",
+                enum: ["name", "instability", "afferent", "efferent"],
+                default: "instability"
+              },
+              include_transitive: %{
+                type: "boolean",
+                description: "Include transitive coupling metrics",
+                default: false
+              },
+              threshold: %{
+                type: "integer",
+                description: "Only show modules with total coupling >= threshold (0 = show all)",
+                default: 0
+              }
+            }
+          }
         }
       ]
     }
@@ -1365,6 +1486,18 @@ defmodule Ragex.MCP.Handlers.Tools do
 
       "find_complex_code" ->
         find_complex_code_tool(arguments)
+
+      "analyze_dependencies" ->
+        analyze_dependencies_tool(arguments)
+
+      "find_circular_dependencies" ->
+        find_circular_dependencies_tool(arguments)
+
+      "find_dead_code" ->
+        find_dead_code_tool(arguments)
+
+      "coupling_report" ->
+        coupling_report_tool(arguments)
 
       _ ->
         {:error, "Unknown tool: #{tool_name}"}
@@ -3925,14 +4058,14 @@ defmodule Ragex.MCP.Handlers.Tools do
         # Extract language safely
         language =
           case metrics do
-            nil -> "unknown"
-            m when is_map(m) -> Map.get(m, :language, "unknown")
+            {:error, :not_found} -> "unknown"
+            {:ok, m} when is_map(m) -> Map.get(m, :language, "unknown")
           end
 
         all_metrics =
           case metrics do
-            nil -> %{}
-            m when is_map(m) -> format_metrics(Map.put(m, :path, path))
+            {:error, :not_found} -> %{}
+            {:ok, m} when is_map(m) -> format_metrics(Map.put(m, :path, path))
           end
 
         %{
@@ -4156,4 +4289,420 @@ defmodule Ragex.MCP.Handlers.Tools do
   end
 
   defp format_language_list_text(_), do: "None"
+
+  # Dependency and dead code analysis tool implementations (Phase 11 Week 2)
+
+  defp analyze_dependencies_tool(params) do
+    module_str = Map.get(params, "module")
+    include_transitive = Map.get(params, "include_transitive", false)
+    format = Map.get(params, "format", "summary")
+
+    case module_str do
+      nil ->
+        # Analyze all modules
+        case DependencyGraph.all_coupling_metrics(include_transitive: include_transitive) do
+          {:ok, all_metrics} ->
+            format_dependencies_all(all_metrics, format, include_transitive)
+
+          {:error, reason} ->
+            {:error, "Failed to analyze dependencies: #{inspect(reason)}"}
+        end
+
+      mod_str ->
+        # Analyze specific module
+        module = String.to_atom(mod_str)
+
+        case DependencyGraph.coupling_metrics(module, include_transitive: include_transitive) do
+          {:ok, metrics} ->
+            format_dependencies_single(module, metrics, format, include_transitive)
+
+          {:error, {:module_not_found, ^module}} ->
+            {:error, "Module not found: #{module}"}
+
+          {:error, reason} ->
+            {:error, "Failed to analyze module: #{inspect(reason)}"}
+        end
+    end
+  end
+
+  defp find_circular_dependencies_tool(params) do
+    scope_str = Map.get(params, "scope", "module")
+    min_cycle_length = Map.get(params, "min_cycle_length", 2)
+    limit = Map.get(params, "limit", 100)
+
+    scope = String.to_atom(scope_str)
+
+    case DependencyGraph.find_cycles(
+           scope: scope,
+           min_cycle_length: min_cycle_length,
+           limit: limit
+         ) do
+      {:ok, cycles} ->
+        formatted_cycles =
+          Enum.map(cycles, fn cycle ->
+            formatted =
+              cycle
+              |> Enum.map(&format_cycle_entity/1)
+              |> Enum.join(" -> ")
+
+            %{
+              length: length(cycle),
+              cycle: formatted,
+              entities: cycle
+            }
+          end)
+
+        {:ok,
+         %{
+           status: "success",
+           scope: scope_str,
+           cycles_found: length(cycles),
+           cycles: formatted_cycles
+         }}
+
+      {:error, reason} ->
+        {:error, "Failed to find circular dependencies: #{inspect(reason)}"}
+    end
+  end
+
+  defp find_dead_code_tool(params) do
+    scope = Map.get(params, "scope", "all")
+    min_confidence = Map.get(params, "min_confidence", 0.5)
+    exclude_tests = Map.get(params, "exclude_tests", true)
+    include_callbacks = Map.get(params, "include_callbacks", false)
+    format = Map.get(params, "format", "summary")
+
+    opts = [
+      min_confidence: min_confidence,
+      exclude_tests: exclude_tests,
+      include_callbacks: include_callbacks
+    ]
+
+    result =
+      case scope do
+        "exports" ->
+          DeadCode.find_unused_exports(opts)
+
+        "private" ->
+          DeadCode.find_unused_private(opts)
+
+        "all" ->
+          DeadCode.find_all_unused(opts)
+
+        "modules" ->
+          DeadCode.find_unused_modules(opts)
+
+        _ ->
+          {:error, "Unknown scope: #{scope}"}
+      end
+
+    case result do
+      {:ok, dead_functions} when scope == "modules" ->
+        # Modules scope returns list of module names
+        {:ok,
+         %{
+           status: "success",
+           scope: scope,
+           unused_modules: length(dead_functions),
+           modules: dead_functions
+         }}
+
+      {:ok, dead_functions} ->
+        # Function scopes return dead_function structs
+        case format do
+          "summary" ->
+            format_dead_code_summary(dead_functions, scope)
+
+          "detailed" ->
+            format_dead_code_detailed(dead_functions, scope)
+
+          "suggestions" ->
+            format_dead_code_suggestions(dead_functions, scope, opts)
+
+          _ ->
+            {:error, "Unknown format: #{format}"}
+        end
+
+      {:error, reason} ->
+        {:error, "Failed to find dead code: #{inspect(reason)}"}
+    end
+  end
+
+  defp coupling_report_tool(params) do
+    format = Map.get(params, "format", "text")
+    sort_by_str = Map.get(params, "sort_by", "instability")
+    include_transitive = Map.get(params, "include_transitive", false)
+    threshold = Map.get(params, "threshold", 0)
+
+    sort_by = String.to_atom(sort_by_str)
+
+    case DependencyGraph.all_coupling_metrics(
+           sort_by: sort_by,
+           include_transitive: include_transitive
+         ) do
+      {:ok, all_metrics} ->
+        # Filter by threshold
+        filtered =
+          if threshold > 0 do
+            Enum.filter(all_metrics, fn {_module, metrics} ->
+              metrics.afferent + metrics.efferent >= threshold
+            end)
+          else
+            all_metrics
+          end
+
+        format_coupling_report(filtered, format, sort_by_str, include_transitive)
+
+      {:error, reason} ->
+        {:error, "Failed to generate coupling report: #{inspect(reason)}"}
+    end
+  end
+
+  # Formatting helpers for dependency tools
+
+  defp format_dependencies_all(all_metrics, "json", _transitive) do
+    data =
+      Enum.map(all_metrics, fn {module, metrics} ->
+        %{
+          module: inspect(module),
+          afferent: metrics.afferent,
+          efferent: metrics.efferent,
+          instability: metrics.instability
+        }
+      end)
+
+    {:ok,
+     %{
+       status: "success",
+       modules_analyzed: length(all_metrics),
+       metrics: data
+     }}
+  end
+
+  defp format_dependencies_all(all_metrics, _format, transitive) do
+    total = length(all_metrics)
+
+    avg_instability =
+      Enum.sum(Enum.map(all_metrics, fn {_, m} -> m.instability end)) / max(total, 1)
+
+    top_unstable =
+      all_metrics
+      |> Enum.take(5)
+      |> Enum.map(fn {module, metrics} ->
+        "  - #{inspect(module)}: I=#{Float.round(metrics.instability, 2)} (Ca=#{metrics.afferent}, Ce=#{metrics.efferent})"
+      end)
+      |> Enum.join("\n")
+
+    content = """
+    Dependency Analysis Summary
+    ==========================
+    Modules Analyzed: #{total}
+    Average Instability: #{Float.round(avg_instability, 2)}
+    Analysis Type: #{if transitive, do: "Transitive", else: "Direct"}
+
+    Top 5 Most Unstable Modules:
+    #{top_unstable}
+    """
+
+    {:ok, %{status: "success", modules_analyzed: total, summary: content}}
+  end
+
+  defp format_dependencies_single(module, metrics, "json", _transitive) do
+    {:ok,
+     %{
+       status: "success",
+       module: inspect(module),
+       metrics: %{
+         afferent: metrics.afferent,
+         efferent: metrics.efferent,
+         instability: metrics.instability
+       }
+     }}
+  end
+
+  defp format_dependencies_single(module, metrics, _format, transitive) do
+    content = """
+    Module: #{inspect(module)}
+    Analysis Type: #{if transitive, do: "Transitive", else: "Direct"}
+
+    Coupling Metrics:
+      Afferent (Ca):  #{metrics.afferent} (modules depending on this)
+      Efferent (Ce):  #{metrics.efferent} (modules this depends on)
+      Instability (I): #{Float.round(metrics.instability, 2)}
+
+    Interpretation:
+      I = 0.0: Maximally stable (many dependents, few dependencies)
+      I = 1.0: Maximally unstable (few dependents, many dependencies)
+    """
+
+    {:ok, %{status: "success", module: inspect(module), summary: content}}
+  end
+
+  defp format_cycle_entity({:function, module, name, arity}), do: "#{module}.#{name}/#{arity}"
+  defp format_cycle_entity(module) when is_atom(module), do: inspect(module)
+  defp format_cycle_entity(other), do: inspect(other)
+
+  defp format_dead_code_summary(dead_functions, scope) do
+    total = length(dead_functions)
+    high_confidence = Enum.count(dead_functions, fn f -> f.confidence > 0.8 end)
+
+    medium_confidence =
+      Enum.count(dead_functions, fn f -> f.confidence > 0.5 && f.confidence <= 0.8 end)
+
+    low_confidence = Enum.count(dead_functions, fn f -> f.confidence <= 0.5 end)
+
+    avg_confidence =
+      if total > 0 do
+        Enum.sum(Enum.map(dead_functions, & &1.confidence)) / total
+      else
+        0.0
+      end
+
+    top_candidates =
+      dead_functions
+      |> Enum.take(10)
+      |> Enum.map(fn df ->
+        {mod, name, arity} = extract_function_parts(df.function)
+        "  - #{mod}.#{name}/#{arity} (confidence: #{Float.round(df.confidence, 2)})"
+      end)
+      |> Enum.join("\n")
+
+    content = """
+    Dead Code Analysis (#{scope})
+    ===========================
+    Total Potentially Dead Functions: #{total}
+    Average Confidence: #{Float.round(avg_confidence, 2)}
+
+    Confidence Breakdown:
+      High (>0.8):    #{high_confidence} (likely safe to remove)
+      Medium (0.5-0.8): #{medium_confidence} (review recommended)
+      Low (<0.5):     #{low_confidence} (likely callbacks/entry points)
+
+    Top Candidates for Removal:
+    #{if total > 0, do: top_candidates, else: "  (none)"}
+    """
+
+    {:ok, %{status: "success", scope: scope, total_found: total, summary: content}}
+  end
+
+  defp format_dead_code_detailed(dead_functions, scope) do
+    detailed =
+      Enum.map(dead_functions, fn df ->
+        {mod, name, arity} = extract_function_parts(df.function)
+
+        %{
+          function: "#{mod}.#{name}/#{arity}",
+          module: inspect(mod),
+          confidence: df.confidence,
+          reason: df.reason,
+          visibility: df.visibility
+        }
+      end)
+
+    {:ok,
+     %{
+       status: "success",
+       scope: scope,
+       total_found: length(dead_functions),
+       functions: detailed
+     }}
+  end
+
+  defp format_dead_code_suggestions(dead_functions, scope, opts) do
+    case DeadCode.removal_suggestions(opts) do
+      {:ok, suggestions} ->
+        formatted_suggestions =
+          Enum.map(suggestions, fn s ->
+            target_str =
+              case s.target do
+                {:function, mod, name, arity} -> "#{mod}.#{name}/#{arity}"
+                {:module, mod} -> inspect(mod)
+                other -> inspect(other)
+              end
+
+            %{
+              type: s.type,
+              confidence: s.confidence,
+              target: target_str,
+              description: s.description
+            }
+          end)
+
+        {:ok,
+         %{
+           status: "success",
+           scope: scope,
+           total_functions: length(dead_functions),
+           suggestions: formatted_suggestions
+         }}
+
+      {:error, reason} ->
+        {:error, "Failed to generate suggestions: #{inspect(reason)}"}
+    end
+  end
+
+  defp format_coupling_report(metrics, "json", _sort_by, _transitive) do
+    data =
+      Enum.map(metrics, fn {module, m} ->
+        %{
+          module: inspect(module),
+          afferent: m.afferent,
+          efferent: m.efferent,
+          instability: m.instability
+        }
+      end)
+
+    {:ok, %{status: "success", modules: length(metrics), report: data}}
+  end
+
+  defp format_coupling_report(metrics, "markdown", sort_by, transitive) do
+    header = """
+    # Module Coupling Report
+
+    **Analysis Type:** #{if transitive, do: "Transitive", else: "Direct"}
+    **Sort By:** #{sort_by}
+    **Modules:** #{length(metrics)}
+
+    | Module | Afferent (Ca) | Efferent (Ce) | Instability (I) |
+    |--------|---------------|---------------|------------------|
+    """
+
+    rows =
+      Enum.map(metrics, fn {module, m} ->
+        "| #{inspect(module)} | #{m.afferent} | #{m.efferent} | #{Float.round(m.instability, 2)} |"
+      end)
+      |> Enum.join("\n    ")
+
+    content = header <> rows
+
+    {:ok, %{status: "success", modules: length(metrics), report: content}}
+  end
+
+  defp format_coupling_report(metrics, "text", sort_by, transitive) do
+    header = """
+    Module Coupling Report
+    =====================
+    Analysis Type: #{if transitive, do: "Transitive", else: "Direct"}
+    Sort By: #{sort_by}
+    Modules: #{length(metrics)}
+
+    """
+
+    rows =
+      Enum.map(metrics, fn {module, m} ->
+        """
+        #{inspect(module)}
+          Afferent (Ca):  #{m.afferent}
+          Efferent (Ce):  #{m.efferent}
+          Instability (I): #{Float.round(m.instability, 2)}
+        """
+      end)
+      |> Enum.join("\n")
+
+    content = header <> rows
+
+    {:ok, %{status: "success", modules: length(metrics), report: content}}
+  end
+
+  defp extract_function_parts({:function, module, name, arity}), do: {module, name, arity}
 end
