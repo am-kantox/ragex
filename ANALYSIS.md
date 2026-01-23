@@ -9,9 +9,10 @@ Comprehensive guide to Ragex's code analysis capabilities powered by Metastatic 
 3. [Code Duplication Detection](#code-duplication-detection)
 4. [Dead Code Detection](#dead-code-detection)
 5. [Dependency Analysis](#dependency-analysis)
-6. [MCP Tools Reference](#mcp-tools-reference)
-7. [Best Practices](#best-practices)
-8. [Troubleshooting](#troubleshooting)
+6. [Impact Analysis](#impact-analysis)
+7. [MCP Tools Reference](#mcp-tools-reference)
+8. [Best Practices](#best-practices)
+9. [Troubleshooting](#troubleshooting)
 
 ## Overview
 
@@ -425,6 +426,262 @@ IO.puts("Instability: #{metrics.instability}")     # 0.0 to 1.0
 }
 ```
 
+## Impact Analysis
+
+Predict the impact of code changes before making them using graph traversal and metrics.
+
+### Overview
+
+Impact Analysis answers critical questions:
+- Which code will be affected by this change?
+- Which tests need to run?
+- How risky is this refactoring?
+- How much effort will this take?
+
+**Key Features:**
+- Graph-based call chain analysis
+- Risk scoring (importance + coupling + complexity)
+- Effort estimation for refactoring operations
+- Test discovery
+
+### Analyzing Change Impact
+
+```elixir
+alias Ragex.Analysis.Impact
+
+# Analyze impact of changing a function
+{:ok, analysis} = Impact.analyze_change({:function, MyModule, :process, 2})
+
+IO.puts("Direct callers: #{length(analysis.direct_callers)}")
+IO.puts("Total affected: #{analysis.affected_count}")
+IO.puts("Risk score: #{analysis.risk_score}")
+IO.puts("Importance: #{analysis.importance}")
+
+# Show recommendations
+Enum.each(analysis.recommendations, &IO.puts/1)
+```
+
+**Parameters:**
+- `depth` - Maximum traversal depth (default: 5)
+- `include_tests` - Include test files in analysis (default: true)
+- `exclude_modules` - Modules to exclude from traversal
+
+**Returns:**
+- `target` - The node being analyzed
+- `direct_callers` - Functions that directly call this
+- `all_affected` - All reachable callers (transitive)
+- `affected_count` - Total number of affected nodes
+- `risk_score` - Overall risk (0.0 to 1.0)
+- `importance` - PageRank-based importance
+- `recommendations` - Actionable advice
+
+### Finding Affected Tests
+
+```elixir
+# Find tests that will be affected by changing this function
+{:ok, tests} = Impact.find_affected_tests({:function, MyModule, :process, 2})
+
+IO.puts("#{length(tests)} tests affected")
+
+Enum.each(tests, fn {:function, module, name, arity} ->
+  IO.puts("  - #{module}.#{name}/#{arity}")
+end)
+```
+
+**Custom Test Patterns:**
+```elixir
+# Support non-standard test naming (e.g., specs)
+{:ok, tests} = Impact.find_affected_tests(
+  {:function, MyModule, :process, 2},
+  test_patterns: ["Spec", "Test", "_test"]
+)
+```
+
+### Estimating Refactoring Effort
+
+```elixir
+# Estimate effort for rename operation
+{:ok, estimate} = Impact.estimate_effort(
+  :rename_function,
+  {:function, MyModule, :old_name, 2}
+)
+
+IO.puts("Operation: #{estimate.operation}")
+IO.puts("Changes needed: #{estimate.estimated_changes} locations")
+IO.puts("Complexity: #{estimate.complexity}")
+IO.puts("Time estimate: #{estimate.estimated_time}")
+
+# Review risks
+IO.puts("\nRisks:")
+Enum.each(estimate.risks, fn risk ->
+  IO.puts("  - #{risk}")
+end)
+
+# Review recommendations
+IO.puts("\nRecommendations:")
+Enum.each(estimate.recommendations, fn rec ->
+  IO.puts("  - #{rec}")
+end)
+```
+
+**Supported Operations:**
+- `:rename_function` - Rename a function
+- `:rename_module` - Rename a module
+- `:extract_function` - Extract code into new function
+- `:inline_function` - Inline a function
+- `:move_function` - Move function to another module
+- `:change_signature` - Change function signature
+
+**Complexity Levels:**
+- `:low` - < 5 affected locations (< 30 min)
+- `:medium` - 5-20 locations (30 min - 2 hours)
+- `:high` - 20-50 locations (2-4 hours)
+- `:very_high` - 50+ locations (1+ day)
+
+### Risk Assessment
+
+```elixir
+# Calculate risk score for a change
+{:ok, risk} = Impact.risk_score({:function, MyModule, :critical_fn, 1})
+
+IO.puts("Target: #{inspect(risk.target)}")
+IO.puts("Overall risk: #{risk.overall} (#{risk.level})")
+IO.puts("\nComponents:")
+IO.puts("  Importance: #{risk.importance}  # PageRank")
+IO.puts("  Coupling: #{risk.coupling}      # Edges")
+IO.puts("  Complexity: #{risk.complexity}  # Code metrics")
+```
+
+**Risk Levels:**
+- `:low` - Overall < 0.3 (safe to change)
+- `:medium` - 0.3 ≤ Overall < 0.6 (needs review)
+- `:high` - 0.6 ≤ Overall < 0.8 (risky, comprehensive testing)
+- `:critical` - Overall ≥ 0.8 (very risky, plan carefully)
+
+**Risk Components:**
+1. **Importance** - Based on PageRank (how central in the call graph)
+2. **Coupling** - Number of incoming/outgoing edges (normalized)
+3. **Complexity** - Code complexity metrics (if available)
+
+### MCP Tools
+
+#### `analyze_impact`
+
+Analyze the impact of changing a function or module.
+
+```json
+{
+  "name": "analyze_impact",
+  "arguments": {
+    "target": "MyModule.process/2",
+    "depth": 5,
+    "include_tests": true,
+    "format": "detailed"
+  }
+}
+```
+
+**Target Formats:**
+- `"Module.function/arity"` - Specific function
+- `"Module"` - Entire module
+
+#### `estimate_refactoring_effort`
+
+Estimate effort for a refactoring operation.
+
+```json
+{
+  "name": "estimate_refactoring_effort",
+  "arguments": {
+    "operation": "rename_function",
+    "target": "MyModule.old_name/2",
+    "format": "summary"
+  }
+}
+```
+
+**Operations:** `rename_function`, `rename_module`, `extract_function`, `inline_function`, `move_function`, `change_signature`
+
+#### `risk_assessment`
+
+Calculate risk score for a change.
+
+```json
+{
+  "name": "risk_assessment",
+  "arguments": {
+    "target": "MyModule.critical/1",
+    "format": "detailed"
+  }
+}
+```
+
+### Workflow Example
+
+**Before Refactoring:**
+
+```elixir
+# Step 1: Analyze impact
+{:ok, impact} = Impact.analyze_change({:function, MyModule, :old_name, 2})
+
+if impact.affected_count > 20 do
+  IO.puts("Warning: Large impact (#{impact.affected_count} locations)")
+end
+
+# Step 2: Find affected tests
+{:ok, tests} = Impact.find_affected_tests({:function, MyModule, :old_name, 2})
+IO.puts("Tests to run: #{length(tests)}")
+
+# Step 3: Estimate effort
+{:ok, estimate} = Impact.estimate_effort(
+  :rename_function, 
+  {:function, MyModule, :old_name, 2}
+)
+IO.puts("Estimated time: #{estimate.estimated_time}")
+
+# Step 4: Assess risk
+{:ok, risk} = Impact.risk_score({:function, MyModule, :old_name, 2})
+
+case risk.level do
+  :low -> IO.puts("✓ Safe to proceed")
+  :medium -> IO.puts("⚠ Review carefully")
+  :high -> IO.puts("⚠ High risk - thorough testing required")
+  :critical -> IO.puts("❌ Critical risk - consider alternative approach")
+end
+
+# Step 5: Proceed with refactoring if acceptable
+if risk.level in [:low, :medium] do
+  # Run refactoring
+  # Run affected tests
+  # Commit changes
+end
+```
+
+### Best Practices
+
+1. **Always analyze before refactoring** - Know the scope of changes
+2. **Check risk levels** - Don't proceed with critical-risk changes without planning
+3. **Run affected tests** - Use test discovery to optimize CI time
+4. **Review transitive callers** - Indirect impacts can be significant
+5. **Consider alternatives** - High-risk operations may have safer approaches
+6. **Document high-impact changes** - Leave notes for future maintainers
+7. **Use depth wisely** - Deep traversal (depth > 10) can be expensive
+8. **Exclude test files for production impact** - Use `include_tests: false`
+
+### Limitations
+
+**Current limitations:**
+- Dynamic function calls (apply, send) not fully tracked
+- Macros may not be accurately analyzed
+- Cross-module dependencies require full analysis
+- Complexity metrics require quality analysis to be run first
+
+**Workarounds:**
+- Run comprehensive analysis before impact analysis
+- Manually review dynamic call sites
+- Use conservative estimates for macro-heavy code
+- Lower confidence scores indicate potential dynamic usage
+
 ## MCP Tools Reference
 
 ### Summary of All Analysis Tools
@@ -438,6 +695,9 @@ IO.puts("Instability: #{metrics.instability}")     # 0.0 to 1.0
 | `analyze_dependencies` | Module dependencies | Graph |
 | `find_circular_dependencies` | Circular deps | Graph |
 | `coupling_report` | Coupling metrics | Graph |
+| `analyze_impact` | Change impact analysis | Graph |
+| `estimate_refactoring_effort` | Effort estimation | Graph + Metrics |
+| `risk_assessment` | Risk scoring | Graph + PageRank |
 
 ### Common Parameters
 
