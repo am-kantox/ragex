@@ -328,6 +328,53 @@ Ragex is an MCP (Model Context Protocol) server that analyzes codebases using co
       ▹ Troubleshooting: Common issues and solutions  
       ▹ CI/CD Integration: Pre-commit hooks, pipeline examples
 </details>
+<details>
+  <summary>CLI Improvements</summary>
+
+    ▸ CLI Foundation
+      ▹ Colors: ANSI color helpers with NO_COLOR support
+      ▹ Output: Rich formatting (sections, lists, tables, key-value pairs, diffs)
+      ▹ Progress: Spinners and progress indicators
+      ▹ Prompt: Interactive prompts (confirm, select, input, number with validation)
+
+    ▸ Enhanced Mix Tasks (7 upgraded)
+      ▹ `mix ragex.cache.{stats,refresh,clear}` - Colored output, spinners, confirmations
+      ▹ `mix ragex.embeddings.migrate` - Sections, formatted output, interactive confirmations
+      ▹ `mix ragex.ai.{usage.stats,cache.stats,cache.clear}` - Rich formatting, color-coded metrics
+
+    ▸ Interactive Wizards
+      ▹ `mix ragex.refactor` - Interactive refactoring wizard:
+        • 5 operations: rename_function, rename_module, change_signature, extract_function, inline_function
+        • Parameter gathering with validation
+        • Knowledge graph integration
+        • Preview and confirmation before applying
+        • Both interactive and direct CLI modes
+      ▹ `mix ragex.configure` - Configuration wizard:
+        • Smart project type detection
+        • Embedding model comparison and selection
+        • AI provider configuration with environment detection
+        • Analysis options and cache settings
+        • Generates complete `.ragex.exs` configuration file
+
+    ▸ Live Dashboard
+      ▹ `mix ragex.dashboard` - Real-time monitoring:
+        • 4 stat panels: Graph, Embeddings, Cache, AI Usage
+        • Live updating display (customizable refresh interval)
+        • Color-coded metrics with thresholds
+        • Activity log
+
+    ▸ Shell Completions
+      ▹ Bash, Zsh, Fish completion scripts
+      ▹ `mix ragex.completions` - Auto-detect and install completions
+      ▹ Task name completion with descriptions
+      ▹ Context-aware argument completion
+
+    ▸ Documentation
+      ▹ Man pages in groff format (ragex.1)
+      ▹ `mix ragex.install_man` - System-wide man page installation
+      ▹ Complete command reference (10 Mix tasks)
+      ▹ Configuration guide and usage examples
+</details>
 
 ### Planned Features
 
@@ -336,11 +383,12 @@ Ragex is an MCP (Model Context Protocol) server that analyzes codebases using co
 - [x] MetaAST-enhanced retrieval
 - [x] Code quality analysis
 - [x] Impact analysis and risk assessment
+- [x] CLI improvements (interactive wizards, dashboard, completions, man pages)
 - [ ] Provider health checks and auto-failover
 - [ ] Production optimizations
 - [ ] Additional language support
 - [ ] Cross-language refactoring via Metastatic
-- [ ] Developer experience improvements
+- [ ] Enhanced editor integrations
 
 ## Architecture
 
