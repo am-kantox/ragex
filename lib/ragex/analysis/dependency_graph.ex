@@ -916,4 +916,35 @@ defmodule Ragex.Analysis.DependencyGraph do
       analysis
     end
   end
+
+  @doc """
+  Analyzes dependencies for all modules in the knowledge graph.
+
+  Convenience function that returns a comprehensive dependency analysis.
+
+  ## Examples
+
+      {:ok, analysis} = DependencyGraph.analyze_all_dependencies()
+      analysis.modules  # => %{MyModule => %{dependencies: [...], ...}}
+  """
+  @spec analyze_all_dependencies() :: {:ok, map()} | {:error, term()}
+  def analyze_all_dependencies do
+    modules = Store.list_nodes(:module)
+
+    module_analyses =
+      Enum.reduce(modules, %{}, fn node, acc ->
+        case analyze_module(node.id) do
+          {:ok, analysis} -> Map.put(acc, node.id, analysis)
+          {:error, _} -> acc
+        end
+      end)
+
+    result = %{
+      modules: module_analyses,
+      total_modules: map_size(module_analyses),
+      timestamp: DateTime.utc_now()
+    }
+
+    {:ok, result}
+  end
 end

@@ -313,4 +313,143 @@ defmodule Ragex.CLI.Output do
   end
 
   defp format_duration(_), do: "N/A"
+
+  @doc """
+  Formats a comprehensive analysis report as text.
+
+  Takes a report map from mix ragex.analyze and formats it for display.
+
+  ## Examples
+
+      text = Output.format_analysis_report(report)
+      IO.puts(text)
+  """
+  @spec format_analysis_report(map()) :: String.t()
+  def format_analysis_report(report) do
+    lines = []
+
+    # Header
+    lines =
+      lines ++
+        [
+          Colors.header("\nRagex Analysis Report"),
+          "Timestamp: #{report.timestamp}",
+          "Path: #{report.path}",
+          "Files Analyzed: #{report.files_analyzed}",
+          "Entities Found: #{report.entities}",
+          ""
+        ]
+
+    # Results sections
+    Enum.reduce(report.results, lines, fn {type, data}, acc ->
+      case type do
+        :security ->
+          acc ++ format_security_section(data)
+
+        :complexity ->
+          acc ++ format_complexity_section(data)
+
+        :smells ->
+          acc ++ format_smells_section(data)
+
+        :duplicates ->
+          acc ++ format_duplicates_section(data)
+
+        :dead_code ->
+          acc ++ format_dead_code_section(data)
+
+        :dependencies ->
+          acc ++ format_dependencies_section(data)
+
+        :quality ->
+          acc ++ format_quality_section(data)
+
+        _ ->
+          acc
+      end
+    end)
+    |> Enum.join("\n")
+  end
+
+  defp format_security_section(%{issues: issues}) do
+    count = length(issues)
+    color_fn = if count > 0, do: &Colors.error/1, else: &Colors.success/1
+
+    [
+      Colors.header("Security Issues"),
+      color_fn.("Found #{count} security issue(s)"),
+      ""
+    ]
+  end
+
+  defp format_complexity_section(%{complex_functions: functions}) do
+    count = length(functions)
+    color_fn = if count > 0, do: &Colors.warning/1, else: &Colors.success/1
+
+    [
+      Colors.header("Complex Functions"),
+      color_fn.("Found #{count} complex function(s)"),
+      ""
+    ]
+  end
+
+  defp format_smells_section(%{smells: smells}) do
+    count = length(smells.results)
+    color_fn = if count > 0, do: &Colors.warning/1, else: &Colors.success/1
+
+    [
+      Colors.header("Code Smells"),
+      color_fn.("Found #{count} code smell(s)"),
+      ""
+    ]
+  end
+
+  defp format_duplicates_section(%{duplicates: duplicates}) do
+    count = length(duplicates)
+    color_fn = if count > 0, do: &Colors.warning/1, else: &Colors.success/1
+
+    [
+      Colors.header("Code Duplicates"),
+      color_fn.("Found #{count} duplicate block(s)"),
+      ""
+    ]
+  end
+
+  defp format_dead_code_section(%{dead_functions: functions}) do
+    count = length(functions)
+    color_fn = if count > 0, do: &Colors.info/1, else: &Colors.success/1
+
+    [
+      Colors.header("Dead Code"),
+      color_fn.("Found #{count} dead function(s)"),
+      ""
+    ]
+  end
+
+  defp format_dependencies_section(%{modules: modules}) do
+    count = map_size(modules)
+
+    [
+      Colors.header("Dependencies"),
+      Colors.info("Analyzed #{count} module(s)"),
+      ""
+    ]
+  end
+
+  defp format_quality_section(metrics) do
+    score = metrics.overall_score || 0
+
+    color_fn =
+      cond do
+        score >= 80 -> &Colors.success/1
+        score >= 60 -> &Colors.warning/1
+        true -> &Colors.error/1
+      end
+
+    [
+      Colors.header("Quality Metrics"),
+      color_fn.("Overall Score: #{score}/100"),
+      ""
+    ]
+  end
 end

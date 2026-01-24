@@ -469,4 +469,16 @@ defmodule Ragex.Analysis.Duplication do
       snippets
     end
   end
+
+  @doc """
+  Finds code duplicates in a directory.
+
+  Alias for `detect_in_directory/2`. Provided for API consistency with mix tasks.
+
+  ## Examples
+
+      {:ok, duplicates} = Duplication.find_duplicates("lib/", threshold: 0.85)
+  """
+  @spec find_duplicates(String.t(), keyword()) :: {:ok, [map()]} | {:error, term()}
+  def find_duplicates(path, opts \\ []), do: detect_in_directory(path, opts)
 end

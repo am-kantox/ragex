@@ -63,9 +63,108 @@ defmodule Ragex.CLI.Progress do
   end
 
   @doc """
+  Starts a progress indicator with a label.
+
+  This is a convenience function that starts a spinner for indeterminate operations.
+  Returns a reference that can be used with `stop/1` or `stop/2`.
+
+  ## Options
+
+  - `:type` - Progress type (`:spinner` or `:dots`) (default: `:spinner`)
+  - `:frames` - Custom spinner frames (default: unicode spinner)
+  - `:interval` - Milliseconds between frames (default: 80)
+
+  ## Examples
+
+      iex> progress = Progress.start("Loading data")
+      iex> # Do work...
+      iex> Progress.stop(progress)
+
+      iex> progress = Progress.start("Processing", type: :dots)
+      iex> # Do work...
+      iex> Progress.stop(progress, "Complete!")
+  """
+  @spec start(String.t(), keyword()) :: pid() | nil
+  def start(label, opts \\ []) when is_binary(label) do
+    # Only show progress if output is a TTY
+    if Colors.enabled?() do
+      type = Keyword.get(opts, :type, :spinner)
+      frames = Keyword.get(opts, :frames, get_frames(type))
+      interval = Keyword.get(opts, :interval, 80)
+
+      spawn(fn ->
+        spinner_loop(frames, label, interval, 0)
+      end)
+    else
+      # Non-TTY: just print the label once
+      IO.puts(label)
+      nil
+    end
+  end
+
+  @doc """
+  Stops a progress indicator.
+
+  Accepts a PID from `start/1`, `start/2`, or `spinner/1`.
+  If nil is passed, this function is a no-op (useful for conditional progress).
+
+  ## Examples
+
+      iex> progress = Progress.start("Loading")
+      iex> Progress.stop(progress)
+
+      iex> Progress.stop(nil)  # Safe - does nothing
+      :ok
+  """
+  @spec stop(pid() | nil) :: :ok
+  def stop(nil), do: :ok
+
+  def stop(pid) when is_pid(pid) do
+    stop_spinner(pid)
+  end
+
+  @doc """
+  Stops a progress indicator with a completion message.
+
+  ## Examples
+
+      iex> progress = Progress.start("Loading")
+      iex> Progress.stop(progress, "Done!")
+
+      iex> Progress.stop(nil, "Skipped")  # Safe - just prints message
+      :ok
+  """
+  @spec stop(pid() | nil, String.t()) :: :ok
+  def stop(nil, message) when is_binary(message) do
+    IO.puts(message)
+    :ok
+  end
+
+  def stop(pid, message) when is_pid(pid) and is_binary(message) do
+    stop_spinner(pid, message)
+  end
+
+  @doc """
+  Updates a running progress indicator with a new label.
+
+  ## Examples
+
+      iex> progress = Progress.start("Step 1")
+      iex> Progress.update(progress, "Step 2")
+  """
+  @spec update(pid() | nil, String.t()) :: :ok
+  def update(nil, _label), do: :ok
+
+  def update(pid, label) when is_pid(pid) and is_binary(label) do
+    send(pid, {:update_label, label})
+    :ok
+  end
+
+  @doc """
   Starts a spinner for an indeterminate operation.
 
   Returns a PID that can be used to stop the spinner.
+  For most use cases, prefer `start/1` or `start/2`.
 
   ## Options
 
@@ -93,24 +192,28 @@ defmodule Ragex.CLI.Progress do
   @doc """
   Stops a running spinner and displays completion message.
 
+  For most use cases, prefer `stop/1` or `stop/2`.
+
   ## Examples
 
       iex> pid = Progress.spinner(label: "Loading")
       iex> Progress.stop_spinner(pid, "Complete!")
   """
   @spec stop_spinner(pid(), String.t() | nil) :: :ok
-  def stop_spinner(pid, message \\ nil) do
-    ref = Process.monitor(pid)
-    Process.exit(pid, :kill)
+  def stop_spinner(pid, message \\ nil) when is_pid(pid) do
+    if Process.alive?(pid) do
+      ref = Process.monitor(pid)
+      Process.exit(pid, :kill)
 
-    # Wait for process to die
-    receive do
-      {:DOWN, ^ref, :process, ^pid, _} -> :ok
-    after
-      100 -> :ok
+      # Wait for process to die
+      receive do
+        {:DOWN, ^ref, :process, ^pid, _} -> :ok
+      after
+        100 -> :ok
+      end
     end
 
-    # Clear line
+    # Clear line and show message
     IO.write("\r\e[K")
     if message, do: IO.puts(message)
     :ok
@@ -234,6 +337,15 @@ defmodule Ragex.CLI.Progress do
 
   # Private helpers
 
+  # Get predefined frame sets
+  defp get_frames(:spinner), do: @spinner_frames
+  defp get_frames(:dots), do: [".", "..", "...", ""]
+  defp get_frames(:line), do: ["-", "\\", "|", "/"]
+  defp get_frames(:arrow), do: ["←", "↖", "↑", "↗", "→", "↘", "↓", "↙"]
+  defp get_frames(:box), do: ["◰", "◳", "◲", "◱"]
+  defp get_frames(_), do: @spinner_frames
+
+  # Main spinner loop with message handling
   defp spinner_loop(frames, label, interval, frame_index) do
     frame = Enum.at(frames, rem(frame_index, length(frames)))
 
@@ -246,12 +358,19 @@ defmodule Ragex.CLI.Progress do
 
     IO.write("\r#{output}")
 
+    # Check for messages or timeout
     receive do
-      _ -> :ok
-    after
-      interval -> :ok
-    end
+      {:update_label, new_label} ->
+        spinner_loop(frames, new_label, interval, frame_index + 1)
 
-    spinner_loop(frames, label, interval, frame_index + 1)
+      :stop ->
+        :ok
+
+      _ ->
+        spinner_loop(frames, label, interval, frame_index + 1)
+    after
+      interval ->
+        spinner_loop(frames, label, interval, frame_index + 1)
+    end
   end
 end

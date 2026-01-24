@@ -695,4 +695,20 @@ defmodule Ragex.Analysis.DeadCode do
       }
     ]
   end
+
+  @doc """
+  Finds all dead code in the knowledge graph.
+
+  Convenience function combining unused exports and private functions.
+
+  ## Examples
+
+      {:ok, dead_functions} = DeadCode.find_dead_code()
+  """
+  @spec find_dead_code() :: {:ok, [map()]} | {:error, term()}
+  def find_dead_code do
+    {:ok, exports} = find_unused_exports()
+    {:ok, private} = find_unused_private()
+    {:ok, exports ++ private}
+  end
 end

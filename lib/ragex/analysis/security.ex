@@ -126,6 +126,18 @@ defmodule Ragex.Analysis.Security do
   end
 
   @doc """
+  Scans a directory for security vulnerabilities.
+
+  Alias for `analyze_directory/2`. Provided for API consistency.
+
+  ## Examples
+
+      {:ok, results} = Security.scan_directory("lib/", severity: [:high, :critical])
+  """
+  @spec scan_directory(String.t(), keyword()) :: {:ok, [analysis_result()]} | {:error, term()}
+  def scan_directory(path, opts \\ []), do: analyze_directory(path, opts)
+
+  @doc """
   Generates a comprehensive security audit report.
 
   Returns a formatted map with:

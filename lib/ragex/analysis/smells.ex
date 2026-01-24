@@ -372,4 +372,16 @@ defmodule Ragex.Analysis.Smells do
   defp severity_order(:high), do: 3
   defp severity_order(:medium), do: 2
   defp severity_order(:low), do: 1
+
+  @doc """
+  Detects code smells in a directory.
+
+  Alias for `analyze_directory/2`. Provided for API consistency with mix tasks.
+
+  ## Examples
+
+      {:ok, smells} = Smells.detect_smells("lib/")
+  """
+  @spec detect_smells(String.t(), keyword()) :: {:ok, [map()]} | {:error, term()}
+  def detect_smells(path, opts \\ []), do: analyze_directory(path, opts)
 end

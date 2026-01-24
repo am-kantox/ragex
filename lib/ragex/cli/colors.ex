@@ -96,6 +96,22 @@ defmodule Ragex.CLI.Colors do
   def muted(text), do: colorize(text, :white, :faint)
 
   @doc """
+  Formats text as a section header with bold cyan.
+
+  ## Examples
+
+      IO.puts Colors.header("Step 1: Analysis")
+  """
+  @spec header(String.t()) :: String.t()
+  def header(text) do
+    if enabled?() do
+      IO.ANSI.cyan() <> IO.ANSI.bright() <> text <> IO.ANSI.reset()
+    else
+      text
+    end
+  end
+
+  @doc """
   Formats text with custom color and style.
 
   ## Examples

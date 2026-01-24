@@ -353,9 +353,8 @@ defmodule Ragex.Analysis.Quality do
       {:ok, results} ->
         # Store results if requested
         if store do
-          results
-          |> Enum.each(fn
-            {:ok, result} ->
+          Enum.each(results, fn
+            %{} = result ->
               case QualityStore.store_metrics(result) do
                 :ok ->
                   :ok
@@ -364,7 +363,7 @@ defmodule Ragex.Analysis.Quality do
                   Logger.warning("Failed to store metrics for #{result.path}: #{inspect(reason)}")
               end
 
-            {:error, _} ->
+            _ ->
               :ok
           end)
         end
@@ -941,5 +940,81 @@ defmodule Ragex.Analysis.Quality do
 
       {:ok, report}
     end
+  end
+
+  @doc """
+  Finds complex code in a directory.
+
+  Convenience function that analyzes a directory and returns functions
+  exceeding the complexity threshold.
+
+  ## Options
+
+  - `:min_complexity` - Minimum cyclomatic complexity (default: 10)
+
+  ## Examples
+
+      {:ok, functions} = Quality.find_complex_code("lib/", min_complexity: 15)
+  """
+  @spec find_complex_code(String.t(), keyword()) :: {:ok, [map()]} | {:error, term()}
+  def find_complex_code(path, opts \\ []) do
+    with {:ok, _stats} <- analyze_directory(path, opts) do
+      functions = find_complex(opts)
+      {:ok, functions}
+    end
+  end
+
+  @doc """
+  Analyzes directory quality metrics.
+
+  Convenience function that returns a quality score and statistics.
+
+  ## Options
+
+  - `:min_complexity` - Complexity threshold (default: 10)
+
+  ## Examples
+
+      {:ok, metrics} = Quality.analyze_quality("lib/")
+      metrics.overall_score  # => 75
+  """
+  @spec analyze_quality(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  def analyze_quality(path, opts \\ []) do
+    with {:ok, _stats} <- analyze_directory(path, opts) do
+      stats = statistics()
+      complex = find_complex(opts)
+
+      metrics = %{
+        overall_score: calculate_quality_score(stats),
+        files_analyzed: stats.total_files || 0,
+        average_complexity: stats.avg_cyclomatic || 0,
+        max_complexity: stats.max_cyclomatic || 0,
+        complex_functions: length(complex),
+        complex_function_list: complex,
+        statistics: stats
+      }
+
+      {:ok, metrics}
+    end
+  end
+
+  # Calculate overall quality score based on various metrics
+  defp calculate_quality_score(stats) do
+    avg_cyclomatic = stats.avg_cyclomatic || 0
+    max_cyclomatic = stats.max_cyclomatic || 0
+    avg_cognitive = stats.avg_cognitive || 0
+
+    # Base score from average complexity (lower is better)
+    complexity_score = max(0, 100 - avg_cyclomatic * 5)
+
+    # Penalty for max complexity
+    max_penalty = min(20, max(0, (max_cyclomatic - 15) * 2))
+
+    # Penalty for cognitive complexity
+    cognitive_penalty = min(15, max(0, avg_cognitive - 10))
+
+    # Calculate final score
+    score = complexity_score - max_penalty - cognitive_penalty
+    round(max(0, min(100, score)))
   end
 end

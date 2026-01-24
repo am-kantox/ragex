@@ -664,6 +664,36 @@ mix compile
 
 **Note**: First compilation will take longer due to ML dependencies. The embedding model (~90MB) will download on first run and be cached at `~/.cache/huggingface/`.
 
+## Demo
+
+A comprehensive demo showcasing all Ragex features is available in `examples/product_cart/`.
+
+The demo uses an intentionally mediocre e-commerce cart application to demonstrate:
+- Security vulnerability scanning (8+ issues detected)
+- Code complexity analysis (cyclomatic, cognitive, Halstead metrics)
+- Code smell detection (long functions, deep nesting, magic numbers)
+- Code duplication detection (Type I-IV clones)
+- Dead code analysis (4 unused functions)
+- Dependency and coupling analysis
+- Impact analysis and refactoring suggestions
+- AI-enhanced features (ValidationAI, AIPreview, AIRefiner, AIAnalyzer, AIInsights)
+
+**Quick Start:**
+```bash
+cd examples/product_cart
+./run_demo.sh
+```
+
+The demo generates 11 detailed reports showing:
+- 8 security vulnerabilities (2 critical, 3 high)
+- 18 code smells across 5 types
+- 52 lines of duplicated code (10% of codebase)
+- 28 lines of dead code (7% of codebase)
+- 8 prioritized refactoring suggestions
+- Expected improvement: 65% better maintainability
+
+See [`examples/product_cart/README.md`](examples/product_cart/README.md) for full details and [`DEMO.md`](examples/product_cart/DEMO.md) for step-by-step walkthrough.
+
 ## Usage
 
 ### As an MCP Server
