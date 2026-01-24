@@ -26,3 +26,4 @@ ragex-*.tar
 /.elixir_ls/
 /.erl.history/
 
+/priv/parsers/haskell/.stack-work/

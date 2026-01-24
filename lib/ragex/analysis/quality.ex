@@ -36,7 +36,7 @@ defmodule Ragex.Analysis.Quality do
       complex = Quality.find_complex(metric: :cyclomatic, threshold: 10)
   """
 
-  alias Ragex.Analysis.{MetastaticBridge, QualityStore}
+  alias Ragex.Analysis.{MetastaticBridge, QualityStore, Security}
   require Logger
 
   @type analysis_result :: %{
@@ -836,5 +836,110 @@ defmodule Ragex.Analysis.Quality do
 
   defp format_languages(languages) do
     Enum.map_join(languages, ", ", fn {lang, count} -> "#{lang} (#{count})" end)
+  end
+
+  @doc """
+  Generates a comprehensive report including both quality and security metrics.
+
+  This convenience function combines quality analysis with security scanning
+  to provide a holistic view of code health.
+
+  ## Parameters
+  - `path`: Directory path to analyze
+  - `opts`: Keyword list of options
+    - `:min_severity` - Minimum security severity to report (default: `:medium`)
+    - `:include_security` - Include security analysis (default: `true`)
+    - All options from `analyze_directory/2`
+
+  ## Returns
+  - `{:ok, report}` - Comprehensive report map
+  - `{:error, reason}` - Analysis failed
+
+  ## Report Structure
+  ```elixir
+  %{
+    quality: %{
+      statistics: quality_report(),
+      most_complex: [{path, complexity}],
+      with_warnings: [{path, warnings}],
+      impure_files: [path]
+    },
+    security: %{
+      total_vulnerabilities: integer(),
+      by_severity: %{critical: integer(), high: integer(), ...},
+      files_with_vulnerabilities: [path],
+      summary: string()
+    }
+  }
+  ```
+
+  ## Examples
+
+      # Full analysis with security
+      {:ok, report} = Quality.comprehensive_report("lib/")
+      report.quality.statistics.avg_cyclomatic  # => 4.5
+      report.security.total_vulnerabilities     # => 3
+
+      # Quality only
+      {:ok, report} = Quality.comprehensive_report("lib/", include_security: false)
+
+      # Only critical security issues
+      {:ok, report} = Quality.comprehensive_report("lib/", min_severity: :critical)
+  """
+  @spec comprehensive_report(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  def comprehensive_report(path, opts \\ []) do
+    include_security = Keyword.get(opts, :include_security, true)
+    min_severity = Keyword.get(opts, :min_severity, :medium)
+
+    # Quality analysis
+    with {:ok, _results} <- analyze_directory(path, opts) do
+      quality_report = %{
+        statistics: statistics(),
+        most_complex: most_complex(limit: 10),
+        with_warnings: find_with_warnings(),
+        impure_files: find_impure()
+      }
+
+      # Security analysis (optional)
+      security_report =
+        if include_security do
+          case Security.analyze_directory(path, min_severity: min_severity) do
+            {:ok, sec_results} ->
+              audit = Security.audit_report(sec_results)
+
+              %{
+                total_vulnerabilities:
+                  Enum.sum(Enum.map(sec_results, & &1.total_vulnerabilities)),
+                by_severity: audit.by_severity,
+                files_with_vulnerabilities:
+                  sec_results
+                  |> Enum.filter(& &1.has_vulnerabilities?)
+                  |> Enum.map(& &1.file),
+                summary: audit.summary
+              }
+
+            {:error, reason} ->
+              Logger.warning("Security analysis failed: #{inspect(reason)}")
+
+              %{
+                total_vulnerabilities: 0,
+                by_severity: %{},
+                files_with_vulnerabilities: [],
+                summary: "Security analysis unavailable",
+                error: reason
+              }
+          end
+        else
+          nil
+        end
+
+      report = %{
+        quality: quality_report,
+        security: security_report,
+        timestamp: DateTime.utc_now()
+      }
+
+      {:ok, report}
+    end
   end
 end
