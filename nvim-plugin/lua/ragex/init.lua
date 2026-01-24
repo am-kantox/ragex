@@ -61,6 +61,7 @@ function M.setup(opts)
   M.refactor = require("ragex.refactor")
   M.analysis = require("ragex.analysis")
   M.graph = require("ragex.graph")
+  M.rag = require("ragex.rag")
   M.utils = require("ragex.utils")
   
   -- Initialize core with config

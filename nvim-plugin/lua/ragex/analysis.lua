@@ -156,4 +156,164 @@ function M.risk_assessment(module, func_name, arity)
   execute_analysis("risk_assessment", params, "Risk Assessment")
 end
 
+-- Security scanning
+function M.scan_security(opts)
+  opts = opts or {}
+  opts.path = opts.path or vim.fn.getcwd()
+  execute_analysis("scan_security", opts, "Security Scan")
+end
+
+function M.security_audit(opts)
+  opts = opts or {}
+  opts.path = opts.path or vim.fn.getcwd()
+  execute_analysis("security_audit", opts, "Security Audit")
+end
+
+function M.check_secrets(opts)
+  opts = opts or {}
+  opts.path = opts.path or vim.fn.getcwd()
+  execute_analysis("check_secrets", opts, "Hardcoded Secrets")
+end
+
+-- Code smells
+function M.detect_smells(opts)
+  opts = opts or {}
+  opts.path = opts.path or vim.fn.getcwd()
+  execute_analysis("detect_smells", opts, "Code Smells")
+end
+
+function M.find_complex_code(opts)
+  opts = opts or {}
+  opts.path = opts.path or vim.fn.getcwd()
+  execute_analysis("find_complex_code", opts, "Complex Code")
+end
+
+function M.analyze_quality(opts)
+  opts = opts or {}
+  opts.path = opts.path or vim.fn.getcwd()
+  execute_analysis("analyze_quality", opts, "Quality Analysis")
+end
+
+-- Dead code patterns
+function M.analyze_dead_code_patterns(opts)
+  opts = opts or {}
+  opts.path = opts.path or vim.fn.getcwd()
+  execute_analysis("analyze_dead_code_patterns", opts, "Dead Code Patterns")
+end
+
+-- Circular dependencies
+function M.find_circular_dependencies()
+  execute_analysis("find_circular_dependencies", {}, "Circular Dependencies")
+end
+
+-- Refactoring suggestions
+function M.suggest_refactorings(opts)
+  opts = opts or {}
+  opts.path = opts.path or vim.fn.getcwd()
+  execute_analysis("suggest_refactorings", opts, "Refactoring Suggestions")
+end
+
+function M.explain_suggestion(suggestion_id)
+  if not suggestion_id then
+    ui.notify("Suggestion ID required", "warn")
+    return
+  end
+  
+  execute_analysis("explain_suggestion", {suggestion_id = suggestion_id}, "Suggestion Explanation")
+end
+
+-- Preview and validation
+function M.preview_refactor(operation, params)
+  if not operation or not params then
+    ui.notify("Operation and params required", "warn")
+    return
+  end
+  
+  local opts = {
+    operation = operation,
+    params = params
+  }
+  execute_analysis("preview_refactor", opts, "Refactoring Preview")
+end
+
+function M.validate_with_ai(path, changes)
+  local opts = {
+    path = path or vim.fn.expand("%:p"),
+    changes = changes
+  }
+  execute_analysis("validate_with_ai", opts, "AI Validation")
+end
+
+-- Refactoring history and conflicts
+function M.refactor_conflicts(operation, params)
+  if not operation or not params then
+    ui.notify("Operation and params required", "warn")
+    return
+  end
+  
+  local opts = {
+    operation = operation,
+    params = params
+  }
+  execute_analysis("refactor_conflicts", opts, "Refactoring Conflicts")
+end
+
+function M.refactor_history()
+  execute_analysis("refactor_history", {}, "Refactoring History")
+end
+
+function M.undo_refactor(operation_id)
+  if not operation_id then
+    ui.notify("Operation ID required", "warn")
+    return
+  end
+  
+  execute_analysis("undo_refactor", {operation_id = operation_id}, "Undo Refactoring")
+end
+
+function M.visualize_impact(module, func_name, arity, format)
+  module = module or utils.get_current_module()
+  if not module then
+    ui.notify("Could not determine current module", "warn")
+    return
+  end
+  
+  if not func_name then
+    func_name, arity = utils.get_function_under_cursor()
+  end
+  
+  if not func_name then
+    ui.notify("Could not determine function name", "warn")
+    return
+  end
+  
+  local params = {
+    module = module,
+    function_name = func_name,
+    format = format or "ascii"
+  }
+  if arity then
+    params.arity = arity
+  end
+  
+  execute_analysis("visualize_impact", params, "Impact Visualization")
+end
+
+-- AI cache management
+function M.get_ai_cache_stats()
+  execute_analysis("get_ai_cache_stats", {}, "AI Cache Stats")
+end
+
+function M.get_ai_usage()
+  execute_analysis("get_ai_usage", {}, "AI Usage Stats")
+end
+
+function M.clear_ai_cache(feature)
+  local params = {}
+  if feature then
+    params.feature = feature
+  end
+  execute_analysis("clear_ai_cache", params, "Clear AI Cache")
+end
+
 return M

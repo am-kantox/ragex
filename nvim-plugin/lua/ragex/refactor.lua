@@ -338,4 +338,192 @@ function M.convert_visibility(module, func_name, arity, to_visibility)
   end)
 end
 
+-- Rename parameter
+function M.rename_parameter(module, func_name, arity, old_param, new_param)
+  if not module then
+    module = utils.get_current_module()
+  end
+  
+  if not module then
+    ui.notify("Could not determine current module", "warn")
+    return
+  end
+  
+  if not func_name then
+    func_name, arity = utils.get_function_under_cursor()
+  end
+  
+  if not func_name then
+    ui.notify("Could not determine function name", "warn")
+    return
+  end
+  
+  if not old_param then
+    ui.input("Old parameter name: ", {}, function(input)
+      if input then
+        M.rename_parameter(module, func_name, arity, input, new_param)
+      end
+    end)
+    return
+  end
+  
+  if not new_param then
+    ui.input("New parameter name: ", {
+      default = old_param,
+    }, function(input)
+      if input then
+        M.rename_parameter(module, func_name, arity, old_param, input)
+      end
+    end)
+    return
+  end
+  
+  local params = {
+    operation = "rename_parameter",
+    module = module,
+    function_name = func_name,
+    old_parameter = old_param,
+    new_parameter = new_param,
+    validate = true,
+    format = true,
+  }
+  
+  if arity then
+    params.arity = arity
+  end
+  
+  local loading = ui.notify_loading("Renaming parameter...")
+  
+  core.execute("advanced_refactor", params, function(result, error_type)
+    ui.dismiss_notification(loading)
+    
+    if error_type then
+      ui.notify("Refactoring failed: " .. error_type, "error")
+      return
+    end
+    
+    local data, err = utils.parse_mcp_response(result)
+    if err then
+      ui.notify("Refactoring failed: " .. err, "error")
+      return
+    end
+    
+    if data.success then
+      ui.notify(string.format("Renamed parameter %s to %s", old_param, new_param), "info")
+    else
+      ui.notify("Refactoring failed: " .. (data.error or "Unknown error"), "error")
+    end
+  end)
+end
+
+-- Change signature
+function M.change_signature(module, func_name, arity, changes)
+  if not module then
+    module = utils.get_current_module()
+  end
+  
+  if not module then
+    ui.notify("Could not determine current module", "warn")
+    return
+  end
+  
+  if not func_name then
+    func_name, arity = utils.get_function_under_cursor()
+  end
+  
+  if not func_name then
+    ui.notify("Could not determine function name", "warn")
+    return
+  end
+  
+  if not changes or #changes == 0 then
+    ui.notify("No changes specified", "warn")
+    return
+  end
+  
+  local params = {
+    operation = "change_signature",
+    module = module,
+    function_name = func_name,
+    changes = changes,
+    validate = true,
+    format = true,
+  }
+  
+  if arity then
+    params.arity = arity
+  end
+  
+  local loading = ui.notify_loading("Changing signature...")
+  
+  core.execute("advanced_refactor", params, function(result, error_type)
+    ui.dismiss_notification(loading)
+    
+    if error_type then
+      ui.notify("Refactoring failed: " .. error_type, "error")
+      return
+    end
+    
+    local data, err = utils.parse_mcp_response(result)
+    if err then
+      ui.notify("Refactoring failed: " .. err, "error")
+      return
+    end
+    
+    if data.success then
+      ui.notify("Signature changed successfully", "info")
+    else
+      ui.notify("Refactoring failed: " .. (data.error or "Unknown error"), "error")
+    end
+  end)
+end
+
+-- Modify attributes
+function M.modify_attributes(module, changes)
+  if not module then
+    module = utils.get_current_module()
+  end
+  
+  if not module then
+    ui.notify("Could not determine current module", "warn")
+    return
+  end
+  
+  if not changes or #changes == 0 then
+    ui.notify("No changes specified", "warn")
+    return
+  end
+  
+  local params = {
+    operation = "modify_attributes",
+    module = module,
+    changes = changes,
+    validate = true,
+    format = true,
+  }
+  
+  local loading = ui.notify_loading("Modifying attributes...")
+  
+  core.execute("advanced_refactor", params, function(result, error_type)
+    ui.dismiss_notification(loading)
+    
+    if error_type then
+      ui.notify("Refactoring failed: " .. error_type, "error")
+      return
+    end
+    
+    local data, err = utils.parse_mcp_response(result)
+    if err then
+      ui.notify("Refactoring failed: " .. err, "error")
+      return
+    end
+    
+    if data.success then
+      ui.notify("Attributes modified successfully", "info")
+    else
+      ui.notify("Refactoring failed: " .. (data.error or "Unknown error"), "error")
+    end
+  end)
+end
+
 return M
