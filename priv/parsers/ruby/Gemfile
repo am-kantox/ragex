@@ -1,0 +1,14 @@
+# frozen_string_literal: true
+
+source 'https://rubygems.org'
+
+ruby '>= 3.0.0'
+
+# Parser gem for Ruby AST parsing
+gem 'parser', '~> 3.3'
+
+# Unparser gem for AST -> source conversion
+gem 'unparser', '~> 0.6'
+
+# JSON for serialization (part of stdlib but explicit)
+gem 'json', '~> 2.7'

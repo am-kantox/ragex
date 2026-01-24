@@ -13,6 +13,7 @@ defmodule Ragex.MCP.Handlers.Tools do
     Impact,
     MetastaticBridge,
     QualityStore,
+    Security,
     Suggestions
   }
 
@@ -1671,6 +1672,93 @@ defmodule Ragex.MCP.Handlers.Tools do
             },
             required: ["content"]
           }
+        },
+        %{
+          name: "scan_security",
+          description:
+            "Scan file or directory for security vulnerabilities (injection, unsafe deserialization, hardcoded secrets, weak crypto) - Phase 1",
+          inputSchema: %{
+            type: "object",
+            properties: %{
+              path: %{
+                type: "string",
+                description: "File or directory path to scan"
+              },
+              recursive: %{
+                type: "boolean",
+                description: "Recursively scan directories",
+                default: true
+              },
+              min_severity: %{
+                type: "string",
+                description: "Minimum severity level to report",
+                enum: ["low", "medium", "high", "critical"],
+                default: "low"
+              },
+              categories: %{
+                type: "array",
+                description: "Filter by vulnerability categories (empty = all)",
+                items: %{
+                  type: "string",
+                  enum: [
+                    "injection",
+                    "unsafe_deserialization",
+                    "hardcoded_secret",
+                    "weak_cryptography",
+                    "insecure_protocol"
+                  ]
+                }
+              }
+            },
+            required: ["path"]
+          }
+        },
+        %{
+          name: "security_audit",
+          description:
+            "Generate comprehensive security audit report for project with CWE mapping and recommendations - Phase 1",
+          inputSchema: %{
+            type: "object",
+            properties: %{
+              path: %{
+                type: "string",
+                description: "Directory path to audit"
+              },
+              format: %{
+                type: "string",
+                description: "Report format",
+                enum: ["json", "markdown", "text"],
+                default: "text"
+              },
+              min_severity: %{
+                type: "string",
+                description: "Minimum severity to include",
+                enum: ["low", "medium", "high", "critical"],
+                default: "low"
+              }
+            },
+            required: ["path"]
+          }
+        },
+        %{
+          name: "check_secrets",
+          description:
+            "Scan for hardcoded secrets (API keys, passwords, tokens) in source code - Phase 1",
+          inputSchema: %{
+            type: "object",
+            properties: %{
+              path: %{
+                type: "string",
+                description: "File or directory path to scan"
+              },
+              recursive: %{
+                type: "boolean",
+                description: "Recursively scan directories",
+                default: true
+              }
+            },
+            required: ["path"]
+          }
         }
       ]
     }
@@ -1852,6 +1940,15 @@ defmodule Ragex.MCP.Handlers.Tools do
 
       "validate_with_ai" ->
         validate_with_ai_tool(arguments)
+
+      "scan_security" ->
+        scan_security_tool(arguments)
+
+      "security_audit" ->
+        security_audit_tool(arguments)
+
+      "check_secrets" ->
+        check_secrets_tool(arguments)
 
       _ ->
         {:error, "Unknown tool: #{tool_name}"}
@@ -6114,6 +6211,270 @@ defmodule Ragex.MCP.Handlers.Tools do
     counts
     |> Enum.map_join("\n", fn {pattern, count} ->
       "  #{pattern}: #{count}"
+    end)
+  end
+
+  # Security Analysis Tools - Phase 1
+
+  defp scan_security_tool(%{"path" => path} = params) do
+    recursive = Map.get(params, "recursive", true)
+    min_severity = Map.get(params, "min_severity", "low") |> String.to_atom()
+    categories = Map.get(params, "categories", [])
+
+    opts = [
+      recursive: recursive,
+      min_severity: min_severity
+    ]
+
+    opts =
+      if categories != [] do
+        Keyword.put(opts, :categories, Enum.map(categories, &String.to_atom/1))
+      else
+        opts
+      end
+
+    result =
+      if File.dir?(path) do
+        case Security.analyze_directory(path, opts) do
+          {:ok, results} ->
+            total_vulns = Enum.sum(Enum.map(results, & &1.total_vulnerabilities))
+            files_with_vulns = Enum.count(results, & &1.has_vulnerabilities?)
+
+            severity_counts =
+              results
+              |> Enum.flat_map(& &1.vulnerabilities)
+              |> Enum.reduce(%{}, fn vuln, acc ->
+                Map.update(acc, vuln.severity, 1, &(&1 + 1))
+              end)
+
+            all_vulns = Enum.flat_map(results, & &1.vulnerabilities)
+
+            %{
+              status: "success",
+              scan_type: "directory",
+              path: path,
+              total_files: length(results),
+              files_with_vulnerabilities: files_with_vulns,
+              total_vulnerabilities: total_vulns,
+              severity_counts: severity_counts,
+              vulnerabilities:
+                Enum.map(all_vulns, fn vuln ->
+                  %{
+                    file: vuln.file,
+                    category: vuln.category,
+                    severity: vuln.severity,
+                    description: vuln.description,
+                    recommendation: vuln.recommendation,
+                    cwe: vuln.cwe,
+                    context: vuln.context
+                  }
+                end)
+            }
+
+          {:error, reason} ->
+            %{status: "error", error: inspect(reason)}
+        end
+      else
+        case Security.analyze_file(path, opts) do
+          {:ok, result} ->
+            %{
+              status: "success",
+              scan_type: "file",
+              path: path,
+              has_vulnerabilities: result.has_vulnerabilities?,
+              total_vulnerabilities: result.total_vulnerabilities,
+              severity_counts: %{
+                critical: result.critical_count,
+                high: result.high_count,
+                medium: result.medium_count,
+                low: result.low_count
+              },
+              vulnerabilities:
+                Enum.map(result.vulnerabilities, fn vuln ->
+                  %{
+                    category: vuln.category,
+                    severity: vuln.severity,
+                    description: vuln.description,
+                    recommendation: vuln.recommendation,
+                    cwe: vuln.cwe,
+                    context: vuln.context
+                  }
+                end)
+            }
+
+          {:error, reason} ->
+            %{status: "error", error: inspect(reason)}
+        end
+      end
+
+    {:ok, result}
+  end
+
+  defp security_audit_tool(%{"path" => path} = params) do
+    format = Map.get(params, "format", "text")
+    min_severity = Map.get(params, "min_severity", "low") |> String.to_atom()
+
+    opts = [
+      recursive: true,
+      min_severity: min_severity
+    ]
+
+    case Security.analyze_directory(path, opts) do
+      {:ok, results} ->
+        report = Security.audit_report(results)
+
+        result =
+          case format do
+            "json" ->
+              %{
+                status: "success",
+                format: "json",
+                report: %{
+                  total_files: report.total_files,
+                  files_with_vulnerabilities: report.files_with_vulnerabilities,
+                  by_severity: format_severity_groups(report.by_severity),
+                  by_category: format_category_groups(report.by_category),
+                  by_file:
+                    Enum.map(report.by_file, fn {file, vulns} ->
+                      {file, length(vulns)}
+                    end)
+                    |> Map.new(),
+                  recommendations:
+                    Enum.map(report.recommendations, fn rec ->
+                      %{
+                        category: rec.category,
+                        count: rec.count,
+                        severity: rec.severity,
+                        recommendation: rec.recommendation
+                      }
+                    end)
+                }
+              }
+
+            "markdown" ->
+              md_content = format_audit_markdown(report)
+              %{status: "success", format: "markdown", content: md_content}
+
+            _ ->
+              # text format
+              %{status: "success", format: "text", content: report.summary}
+          end
+
+        {:ok, result}
+
+      {:error, reason} ->
+        {:ok, %{status: "error", error: inspect(reason)}}
+    end
+  end
+
+  defp check_secrets_tool(%{"path" => path} = params) do
+    recursive = Map.get(params, "recursive", true)
+
+    opts = [
+      recursive: recursive,
+      categories: [:hardcoded_secret]
+    ]
+
+    result =
+      if File.dir?(path) do
+        case Security.analyze_directory(path, opts) do
+          {:ok, results} ->
+            secrets =
+              results
+              |> Enum.flat_map(fn result ->
+                Enum.map(result.vulnerabilities, fn vuln ->
+                  %{
+                    file: vuln.file,
+                    description: vuln.description,
+                    context: vuln.context
+                  }
+                end)
+              end)
+
+            %{
+              status: "success",
+              path: path,
+              total_secrets: length(secrets),
+              secrets: secrets
+            }
+
+          {:error, reason} ->
+            %{status: "error", error: inspect(reason)}
+        end
+      else
+        case Security.analyze_file(path, opts) do
+          {:ok, result} ->
+            secrets =
+              Enum.map(result.vulnerabilities, fn vuln ->
+                %{
+                  description: vuln.description,
+                  context: vuln.context
+                }
+              end)
+
+            %{
+              status: "success",
+              path: path,
+              total_secrets: length(secrets),
+              secrets: secrets
+            }
+
+          {:error, reason} ->
+            %{status: "error", error: inspect(reason)}
+        end
+      end
+
+    {:ok, result}
+  end
+
+  defp format_severity_groups(by_severity) do
+    Enum.map(by_severity, fn {severity, vulns} ->
+      {severity, length(vulns)}
+    end)
+    |> Map.new()
+  end
+
+  defp format_category_groups(by_category) do
+    Enum.map(by_category, fn {category, vulns} ->
+      {category, length(vulns)}
+    end)
+    |> Map.new()
+  end
+
+  defp format_audit_markdown(report) do
+    """
+    # Security Audit Report
+
+    **Generated**: #{DateTime.to_iso8601(report.timestamp)}
+
+    ## Summary
+
+    - **Total Files Analyzed**: #{report.total_files}
+    - **Files with Vulnerabilities**: #{report.files_with_vulnerabilities}
+
+    #{report.summary}
+
+    ## Vulnerabilities by Category
+
+    #{format_category_markdown(report.by_category)}
+
+    ## Recommendations
+
+    #{format_recommendations_markdown(report.recommendations)}
+    """
+  end
+
+  defp format_category_markdown(by_category) do
+    by_category
+    |> Enum.map_join("\n", fn {category, vulns} ->
+      "### #{category} (#{length(vulns)})"
+    end)
+  end
+
+  defp format_recommendations_markdown(recommendations) do
+    recommendations
+    |> Enum.map_join("\n", fn rec ->
+      "- **[#{rec.severity}]** #{rec.recommendation}"
     end)
   end
 end
