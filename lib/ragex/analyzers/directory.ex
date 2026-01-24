@@ -82,15 +82,18 @@ defmodule Ragex.Analyzers.Directory do
       )
       |> Stream.with_index(1)
       |> Enum.map(fn
-        {{:ok, result}, index} ->
+        {{:ok, {:ok, result}}, index} ->
           notify_progress("analysis_file", %{
             current: index,
             total: length(files_to_analyze),
-            file: result[:file],
-            status: result[:status]
+            file: result.file,
+            status: result.status
           })
 
-          result
+          {:ok, result}
+
+        {{:ok, {:error, {file, reason}}}, _index} ->
+          {:error, {file, reason}}
 
         {{:exit, reason}, _index} ->
           {:error, {:task_exit, reason}}
@@ -103,7 +106,10 @@ defmodule Ragex.Analyzers.Directory do
     errors =
       results
       |> Enum.filter(&match?({:error, _}, &1))
-      |> Enum.map(fn {:error, {file, reason}} -> %{file: file, reason: reason} end)
+      |> Enum.map(fn
+        {:error, {file, reason}} -> %{file: file, reason: reason}
+        {:error, {:task_exit, reason}} -> %{file: "unknown", reason: {:task_exit, reason}}
+      end)
 
     notify_progress("analysis_complete", %{
       total: length(file_paths),
@@ -302,7 +308,7 @@ defmodule Ragex.Analyzers.Directory do
       Server.send_notification("analyzer/progress", %{
         event: event,
         params: params,
-        timestamp: DateTime.utc_now()
+        timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
       })
     end
   end

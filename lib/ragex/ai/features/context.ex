@@ -403,7 +403,7 @@ defmodule Ragex.AI.Features.Context do
 
   defp build_module_context(module) do
     module_node = Store.find_node(:module, module)
-    
+
     # Get functions for this module using list_functions with module filter
     # Use large limit instead of :infinity which list_functions doesn't accept
     module_functions = Store.list_functions(module: module, limit: 10_000)
@@ -487,7 +487,9 @@ defmodule Ragex.AI.Features.Context do
 
   defp find_simpler_alternatives({:function, module, name, arity}, metrics, opts) do
     limit = Keyword.get(opts, :limit, 3)
-    current_complexity = Map.get(metrics, :cyclomatic_complexity, Map.get(metrics, :complexity, 999))
+
+    current_complexity =
+      Map.get(metrics, :cyclomatic_complexity, Map.get(metrics, :complexity, 999))
 
     # Get all functions from the same module or similar modules
     all_functions = Store.list_functions(module: module, limit: 100)

@@ -2,6 +2,7 @@ defmodule Ragex.AutoAnalyzeTest do
   use ExUnit.Case, async: false
 
   alias Ragex.Analyzers.Directory
+  alias Ragex.Embeddings.FileTracker
   alias Ragex.Graph.Store
 
   @test_dir "/tmp/ragex_test_auto_analyze"
@@ -21,12 +22,14 @@ defmodule Ragex.AutoAnalyzeTest do
     end
     """)
 
-    # Clean up graph store
+    # Clean up graph store and file tracker
     Store.clear()
+    FileTracker.clear_all()
 
     on_exit(fn ->
       File.rm_rf!(@test_dir)
       Store.clear()
+      FileTracker.clear_all()
     end)
 
     :ok
@@ -61,17 +64,19 @@ defmodule Ragex.AutoAnalyzeTest do
 
       # Check that our test module is in the graph
       nodes = Store.list_nodes()
+
       assert Enum.any?(nodes, fn node ->
-        node.type == :module && node.id == TestModule
-      end)
+               node.type == :module && node.id == TestModule
+             end)
     end
 
     test "multiple directories are analyzed sequentially" do
       # Create second test directory
       test_dir2 = "/tmp/ragex_test_auto_analyze_2"
       test_file2 = Path.join(test_dir2, "another_module.ex")
-      
+
       File.mkdir_p!(test_dir2)
+
       File.write!(test_file2, """
       defmodule AnotherModule do
         def test, do: :ok
@@ -89,7 +94,9 @@ defmodule Ragex.AutoAnalyzeTest do
 
       # Both modules should be in the graph
       nodes = Store.list_nodes()
-      module_names = nodes
+
+      module_names =
+        nodes
         |> Enum.filter(&(&1.type == :module))
         |> Enum.map(& &1.id)
 
@@ -115,9 +122,10 @@ defmodule Ragex.AutoAnalyzeTest do
 
       # Valid directory should still be analyzed
       nodes = Store.list_nodes()
+
       assert Enum.any?(nodes, fn node ->
-        node.type == :module && node.id == TestModule
-      end)
+               node.type == :module && node.id == TestModule
+             end)
     end
 
     test "analysis includes embeddings by default" do
@@ -132,9 +140,11 @@ defmodule Ragex.AutoAnalyzeTest do
 
       # Check that embeddings were generated
       nodes = Store.list_nodes()
-      module_node = Enum.find(nodes, fn node ->
-        node.type == :module && node.id == TestModule
-      end)
+
+      module_node =
+        Enum.find(nodes, fn node ->
+          node.type == :module && node.id == TestModule
+        end)
 
       # Module should have embeddings
       assert module_node != nil
@@ -160,9 +170,10 @@ defmodule Ragex.AutoAnalyzeTest do
       Process.sleep(200)
 
       nodes = Store.list_nodes()
+
       assert Enum.any?(nodes, fn node ->
-        node.type == :module && node.id == TestModule
-      end)
+               node.type == :module && node.id == TestModule
+             end)
     end
   end
 end

@@ -80,6 +80,7 @@ defmodule Ragex.AI.Features.ContextTest do
     test "builds context for function analysis" do
       # Add function to store
       Store.add_node(:module, TestModule, %{name: TestModule})
+
       Store.add_node(:function, {TestModule, :unused, 0}, %{
         name: :unused,
         arity: 0,
@@ -174,6 +175,7 @@ defmodule Ragex.AI.Features.ContextTest do
 
     test "formats dead code analysis context" do
       Store.add_node(:module, TestModule, %{name: TestModule})
+
       Store.add_node(:function, {TestModule, :unused, 0}, %{
         name: :unused,
         arity: 0,
