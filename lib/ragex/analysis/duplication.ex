@@ -35,7 +35,13 @@ defmodule Ragex.Analysis.Duplication do
   """
 
   alias Metastatic.Analysis.Duplication, as: MetaDuplication
-  alias Ragex.{Analysis.MetastaticBridge, Graph.Store, VectorStore}
+
+  alias Ragex.{
+    Analysis.Duplication.AIAnalyzer,
+    Analysis.MetastaticBridge,
+    Graph.Store,
+    VectorStore
+  }
 
   require Logger
 
@@ -105,6 +111,7 @@ defmodule Ragex.Analysis.Duplication do
   ## Parameters
   - `file_paths` - List of file paths to analyze
   - `opts` - Keyword list of options (same as detect_between_files/3)
+    - `:ai_analyze` - Use AI for semantic analysis (default: from config)
 
   ## Returns
   - `{:ok, [clone_pair]}` - List of detected clone pairs
@@ -142,7 +149,9 @@ defmodule Ragex.Analysis.Duplication do
                 file1: path1,
                 file2: path2,
                 clone_type: result.clone_type,
+                type: result.clone_type,
                 similarity: result.similarity_score,
+                snippets: extract_snippets(result, path1, path2),
                 details: %{
                   locations: result.locations || [],
                   summary: result.summary || ""
@@ -154,6 +163,7 @@ defmodule Ragex.Analysis.Duplication do
         end
       end
       |> Enum.filter(&(&1 != nil))
+      |> maybe_analyze_with_ai(opts)
 
     {:ok, clones}
   rescue
@@ -389,5 +399,74 @@ defmodule Ragex.Analysis.Duplication do
   defp average_similarity(pairs) do
     sum = Enum.sum(Enum.map(pairs, & &1.similarity))
     Float.round(sum / length(pairs), 2)
+  end
+
+  # Conditionally analyze clones with AI
+  defp maybe_analyze_with_ai(clones, opts) do
+    ai_analyze = Keyword.get(opts, :ai_analyze)
+
+    # Only use AI if explicitly enabled or if config enables it
+    use_ai =
+      case ai_analyze do
+        true -> true
+        false -> false
+        nil -> AIAnalyzer.enabled?(opts)
+      end
+
+    if use_ai && !Enum.empty?(clones) do
+      Logger.info("Analyzing #{length(clones)} clone pairs with AI")
+
+      case AIAnalyzer.analyze_batch(clones, opts) do
+        {:ok, analyzed} ->
+          Logger.info("AI analysis complete")
+          analyzed
+
+          # {:error, reason} ->
+          #   Logger.warning("AI analysis failed: #{inspect(reason)}, using original results")
+          #   clones
+      end
+    else
+      clones
+    end
+  end
+
+  # Extract code snippets from duplication result
+  defp extract_snippets(result, path1, path2) do
+    # Try to extract code snippets from locations
+    locations = result.locations || []
+
+    snippets =
+      Enum.map(locations, fn loc ->
+        # Location format varies by clone detector
+        # Try to extract file and code
+        case loc do
+          %{file: ^path1, code: code} ->
+            %{file: path1, location: path1, code: code}
+
+          %{file: ^path2, code: code} ->
+            %{file: path2, location: path2, code: code}
+
+          %{line_start: line_start, line_end: line_end, file: file, code: code} ->
+            %{
+              file: file,
+              location: "#{file}:#{line_start}-#{line_end}",
+              code: code
+            }
+
+          _ ->
+            nil
+        end
+      end)
+      |> Enum.filter(&(&1 != nil))
+
+    # If no snippets extracted, create placeholder
+    if Enum.empty?(snippets) do
+      [
+        %{file: path1, location: path1, code: "(code snippet not available)"},
+        %{file: path2, location: path2, code: "(code snippet not available)"}
+      ]
+    else
+      snippets
+    end
   end
 end

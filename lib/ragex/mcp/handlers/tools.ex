@@ -22,7 +22,19 @@ defmodule Ragex.MCP.Handlers.Tools do
   alias Ragex.Analyzers.JavaScript, as: JavaScriptAnalyzer
   alias Ragex.Analyzers.Metastatic
   alias Ragex.Analyzers.Python, as: PythonAnalyzer
-  alias Ragex.Editor.{Conflict, Core, Refactor, Transaction, Types, Undo, Visualize}
+
+  alias Ragex.Editor.{
+    Conflict,
+    Core,
+    Refactor,
+    Refactor.AIPreview,
+    Transaction,
+    Types,
+    Undo,
+    ValidationAI,
+    Visualize
+  }
+
   alias Ragex.Embeddings.Bumblebee
   alias Ragex.Embeddings.Helper, as: EmbeddingsHelper
   alias Ragex.Graph.Algorithms
@@ -1015,7 +1027,7 @@ defmodule Ragex.MCP.Handlers.Tools do
         %{
           name: "preview_refactor",
           description:
-            "Preview refactoring changes without applying them - shows diffs, conflicts, and statistics",
+            "Preview refactoring changes without applying them - shows diffs, conflicts, and statistics with optional AI commentary",
           inputSchema: %{
             type: "object",
             properties: %{
@@ -1033,6 +1045,12 @@ defmodule Ragex.MCP.Handlers.Tools do
                 description: "Preview output format",
                 enum: ["unified", "side_by_side", "json"],
                 default: "unified"
+              },
+              ai_commentary: %{
+                type: "boolean",
+                description:
+                  "Generate AI-powered summary and risk assessment (default: from config)",
+                default: true
               }
             },
             required: ["operation", "params"]
@@ -1619,6 +1637,40 @@ defmodule Ragex.MCP.Handlers.Tools do
             },
             required: ["suggestion_id"]
           }
+        },
+        %{
+          name: "validate_with_ai",
+          description:
+            "Validate code with AI-enhanced error explanations and fix suggestions - Phase B",
+          inputSchema: %{
+            type: "object",
+            properties: %{
+              content: %{
+                type: "string",
+                description: "Code content to validate"
+              },
+              path: %{
+                type: "string",
+                description: "File path (for language detection)"
+              },
+              language: %{
+                type: "string",
+                description: "Explicit language override",
+                enum: ["elixir", "erlang", "python", "javascript", "typescript"]
+              },
+              ai_explain: %{
+                type: "boolean",
+                description: "Enable AI explanations (default: from config)",
+                default: true
+              },
+              surrounding_lines: %{
+                type: "integer",
+                description: "Lines of context around errors",
+                default: 3
+              }
+            },
+            required: ["content"]
+          }
         }
       ]
     }
@@ -1797,6 +1849,9 @@ defmodule Ragex.MCP.Handlers.Tools do
 
       "explain_suggestion" ->
         explain_suggestion_tool(arguments)
+
+      "validate_with_ai" ->
+        validate_with_ai_tool(arguments)
 
       _ ->
         {:error, "Unknown tool: #{tool_name}"}
@@ -3993,20 +4048,83 @@ defmodule Ragex.MCP.Handlers.Tools do
 
   defp preview_refactor_tool(%{"operation" => operation, "params" => params} = args) do
     format = Map.get(args, "format", "unified")
+    ai_commentary = Map.get(args, "ai_commentary", true)
 
-    # Create a dry-run preview - this would need Preview module integration
-    # For now, return a basic structure
-    {:ok,
-     %{
-       status: "preview",
-       operation: operation,
-       message:
-         "Preview mode: would perform #{operation} with params #{inspect(params)}. Format: #{format}",
-       format: format
-     }}
+    # Build preview data structure
+    preview_data = %{
+      operation: String.to_atom(operation),
+      params: atomize_params(params),
+      affected_files: extract_affected_files(params),
+      stats: %{}
+    }
+
+    # Base preview result
+    base_result = %{
+      status: "preview",
+      operation: operation,
+      params: params,
+      format: format,
+      affected_files: preview_data.affected_files,
+      file_count: length(preview_data.affected_files)
+    }
+
+    # Add AI commentary if enabled
+    result =
+      if ai_commentary do
+        case AIPreview.generate_commentary(
+               preview_data,
+               ai_preview: ai_commentary
+             ) do
+          {:ok, commentary} ->
+            Map.put(base_result, :ai_commentary, %{
+              summary: commentary.summary,
+              risk_level: Atom.to_string(commentary.risk_level),
+              risks: commentary.risks,
+              recommendations: commentary.recommendations,
+              impact: commentary.estimated_impact,
+              confidence: Float.round(commentary.confidence, 2)
+            })
+
+          {:error, :ai_preview_disabled} ->
+            base_result
+
+          {:error, reason} ->
+            require Logger
+            Logger.warning("Failed to generate AI commentary: #{inspect(reason)}")
+            Map.put(base_result, :ai_commentary_error, inspect(reason))
+        end
+      else
+        base_result
+      end
+
+    {:ok, result}
   end
 
   defp preview_refactor_tool(_), do: {:error, "Missing required parameters"}
+
+  defp atomize_params(params) when is_map(params) do
+    Enum.into(params, %{}, fn {k, v} ->
+      key = if is_binary(k), do: String.to_atom(k), else: k
+      {key, v}
+    end)
+  end
+
+  defp extract_affected_files(params) do
+    # Extract affected files based on operation params
+    # This is a simplified implementation - in production you'd query the actual files
+    cond do
+      Map.has_key?(params, "module") ->
+        # For function refactors, estimate affected files
+        ["lib/#{String.downcase(params["module"])}.ex"]
+
+      Map.has_key?(params, "old_module") ->
+        # For module renames
+        ["lib/#{String.downcase(params["old_module"])}.ex"]
+
+      true ->
+        []
+    end
+  end
 
   defp refactor_conflicts_tool(%{"operation" => operation, "params" => params}) do
     # Check conflicts based on operation type
@@ -5774,6 +5892,86 @@ defmodule Ragex.MCP.Handlers.Tools do
   end
 
   defp explain_suggestion_tool(_), do: {:error, "Missing required 'suggestion_id' parameter"}
+
+  # Validation AI tool implementation (Phase B)
+
+  defp validate_with_ai_tool(%{"content" => content} = params) do
+    opts = []
+
+    # Add optional path parameter
+    opts =
+      if Map.has_key?(params, "path") do
+        Keyword.put(opts, :path, params["path"])
+      else
+        opts
+      end
+
+    # Add optional language parameter
+    opts =
+      if Map.has_key?(params, "language") do
+        Keyword.put(opts, :language, String.to_atom(params["language"]))
+      else
+        opts
+      end
+
+    # Add optional ai_explain parameter
+    opts =
+      if Map.has_key?(params, "ai_explain") do
+        Keyword.put(opts, :ai_explain, params["ai_explain"])
+      else
+        opts
+      end
+
+    # Add optional surrounding_lines parameter
+    opts =
+      if Map.has_key?(params, "surrounding_lines") do
+        Keyword.put(opts, :surrounding_lines, params["surrounding_lines"])
+      else
+        opts
+      end
+
+    case ValidationAI.validate_with_explanation(content, opts) do
+      {:ok, :valid} ->
+        {:ok, %{status: "valid", message: "Code is syntactically correct"}}
+
+      {:ok, :no_validator} ->
+        {:ok,
+         %{
+           status: "no_validator",
+           message: "No validator available for this language",
+           path: opts[:path]
+         }}
+
+      {:error, errors} ->
+        formatted_errors =
+          Enum.map(errors, fn error ->
+            base = %{
+              message: error[:message],
+              line: error[:line],
+              column: error[:column]
+            }
+
+            # Add AI fields if present
+            base
+            |> maybe_add_field(:ai_explanation, error[:ai_explanation])
+            |> maybe_add_field(:ai_suggestion, error[:ai_suggestion])
+            |> maybe_add_field(:ai_generated_at, error[:ai_generated_at])
+          end)
+
+        {:ok,
+         %{
+           status: "invalid",
+           error_count: length(errors),
+           errors: formatted_errors,
+           ai_enabled: ValidationAI.enabled?(opts)
+         }}
+    end
+  end
+
+  defp validate_with_ai_tool(_), do: {:error, "Missing required 'content' parameter"}
+
+  defp maybe_add_field(map, _key, nil), do: map
+  defp maybe_add_field(map, key, value), do: Map.put(map, key, value)
 
   defp parse_suggestion_target(target_str) do
     cond do

@@ -12,6 +12,7 @@ defmodule Ragex.Analysis.DependencyGraph do
   All analysis operates on the existing knowledge graph edges (`:calls`, `:imports`).
   """
 
+  alias Ragex.Analysis.DependencyGraph.AIInsights
   alias Ragex.Graph.Store
   require Logger
 
@@ -95,6 +96,7 @@ defmodule Ragex.Analysis.DependencyGraph do
   - `opts`: Keyword list of options
     - `:include_transitive` - Include transitive dependencies (default: false)
     - `:include_functions` - Include function list (default: false)
+    - `:ai_insights` - Use AI for architectural insights (default: from config)
 
   ## Returns
   - `{:ok, analysis}` - Comprehensive module analysis map
@@ -124,6 +126,7 @@ defmodule Ragex.Analysis.DependencyGraph do
   def analyze_module(module, opts \\ []) do
     include_transitive = Keyword.get(opts, :include_transitive, false)
     include_functions = Keyword.get(opts, :include_functions, false)
+    ai_insights = Keyword.get(opts, :ai_insights)
 
     case Store.find_node(:module, module) do
       nil ->
@@ -167,6 +170,9 @@ defmodule Ragex.Analysis.DependencyGraph do
             else
               analysis
             end
+
+          # Optionally add AI insights
+          analysis = maybe_add_ai_insights(analysis, ai_insights, opts)
 
           {:ok, analysis}
         rescue
@@ -874,5 +880,40 @@ defmodule Ragex.Analysis.DependencyGraph do
   defp mix_task?(module) do
     module_str = to_string(module)
     String.starts_with?(module_str, "Mix.Tasks.")
+  end
+
+  # Conditionally add AI insights to analysis
+  defp maybe_add_ai_insights(analysis, ai_insights, opts) do
+    # Only use AI if explicitly enabled or if config enables it
+    use_ai =
+      case ai_insights do
+        true -> true
+        false -> false
+        nil -> AIInsights.enabled?(opts)
+      end
+
+    if use_ai do
+      # Build coupling data for AI
+      coupling_data = %{
+        module: analysis.module,
+        coupling_in: analysis.coupling.afferent,
+        coupling_out: analysis.coupling.efferent,
+        instability: analysis.coupling.instability,
+        dependencies: analysis.dependencies,
+        dependents: analysis.dependents
+      }
+
+      case AIInsights.analyze_coupling(coupling_data, opts) do
+        {:ok, insights} ->
+          Logger.info("Added AI insights for #{analysis.module}")
+          Map.put(analysis, :ai_insights, insights)
+
+        {:error, reason} ->
+          Logger.warning("Failed to get AI insights for #{analysis.module}: #{inspect(reason)}")
+          analysis
+      end
+    else
+      analysis
+    end
   end
 end

@@ -21,7 +21,7 @@ defmodule Ragex.Analysis.DeadCode do
   """
 
   alias Metastatic.Analysis.DeadCode, as: MetaDeadCode
-  alias Ragex.{Analysis.MetastaticBridge, Graph.Store}
+  alias Ragex.{Analysis.DeadCode.AIRefiner, Analysis.MetastaticBridge, Graph.Store}
 
   require Logger
 
@@ -101,6 +101,7 @@ defmodule Ragex.Analysis.DeadCode do
     - `:min_confidence` - Minimum confidence threshold (0.0-1.0, default: 0.5)
     - `:exclude_tests` - Exclude test modules (default: true)
     - `:include_callbacks` - Include potential callbacks (default: false)
+    - `:ai_refine` - Use AI to refine confidence scores (default: from config)
 
   ## Returns
   - `{:ok, [dead_function]}` - List of potentially unused functions with confidence scores
@@ -119,6 +120,7 @@ defmodule Ragex.Analysis.DeadCode do
     min_confidence = Keyword.get(opts, :min_confidence, 0.5)
     exclude_tests = Keyword.get(opts, :exclude_tests, true)
     include_callbacks = Keyword.get(opts, :include_callbacks, false)
+    ai_refine = Keyword.get(opts, :ai_refine)
 
     try do
       functions = Store.list_nodes(:function, :infinity)
@@ -134,6 +136,7 @@ defmodule Ragex.Analysis.DeadCode do
             (include_callbacks || result.confidence >= min_confidence) &&
             result.confidence >= min_confidence
         end)
+        |> maybe_refine_with_ai(ai_refine, opts)
         |> Enum.sort_by(& &1.confidence, :desc)
 
       {:ok, dead_functions}
@@ -154,6 +157,7 @@ defmodule Ragex.Analysis.DeadCode do
   - `opts`: Keyword list of options
     - `:min_confidence` - Minimum confidence threshold (default: 0.7)
     - `:exclude_tests` - Exclude test modules (default: true)
+    - `:ai_refine` - Use AI to refine confidence scores (default: from config)
 
   ## Returns
   - `{:ok, [dead_function]}` - List of unused private functions
@@ -167,6 +171,7 @@ defmodule Ragex.Analysis.DeadCode do
   def find_unused_private(opts \\ []) do
     min_confidence = Keyword.get(opts, :min_confidence, 0.7)
     exclude_tests = Keyword.get(opts, :exclude_tests, true)
+    ai_refine = Keyword.get(opts, :ai_refine)
 
     try do
       functions = Store.list_nodes(:function, :infinity)
@@ -180,6 +185,7 @@ defmodule Ragex.Analysis.DeadCode do
         |> Enum.filter(fn result ->
           result != nil && result.confidence >= min_confidence
         end)
+        |> maybe_refine_with_ai(ai_refine, opts)
         |> Enum.sort_by(& &1.confidence, :desc)
 
       {:ok, dead_functions}
@@ -618,6 +624,33 @@ defmodule Ragex.Analysis.DeadCode do
 
   # Extract module from function reference
   defp extract_module({:function, module, _name, _arity}), do: module
+
+  # Conditionally refine confidence scores with AI
+  defp maybe_refine_with_ai(dead_functions, ai_refine, opts) do
+    # Only use AI if explicitly enabled or if config enables it
+    use_ai =
+      case ai_refine do
+        true -> true
+        false -> false
+        nil -> AIRefiner.enabled?(opts)
+      end
+
+    if use_ai && !Enum.empty?(dead_functions) do
+      Logger.info("Refining #{length(dead_functions)} dead code results with AI")
+
+      case AIRefiner.refine_batch(dead_functions, opts) do
+        {:ok, refined} ->
+          Logger.info("AI refinement complete")
+          refined
+
+          # {:error, reason} ->
+          #   Logger.warning("AI refinement failed: #{inspect(reason)}, using original results")
+          #   dead_functions
+      end
+    else
+      dead_functions
+    end
+  end
 
   # Create a module-level summary suggestion
   defp create_module_summary_suggestion(module_suggestions) do
