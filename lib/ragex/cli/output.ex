@@ -326,130 +326,467 @@ defmodule Ragex.CLI.Output do
   """
   @spec format_analysis_report(map()) :: String.t()
   def format_analysis_report(report) do
-    lines = []
+    # Header box with formatted content
+    header_content = [
+      "Timestamp:      #{format_timestamp(report.timestamp)}",
+      "Path:           #{report.path}",
+      "Files Analyzed: #{report.files_analyzed}",
+      "Entities Found: #{report.entities}"
+    ] |> Enum.join("\n")
 
-    # Header
-    lines =
-      lines ++
-        [
-          Colors.header("\nRagex Analysis Report"),
-          "Timestamp: #{report.timestamp}",
-          "Path: #{report.path}",
-          "Files Analyzed: #{report.files_analyzed}",
-          "Entities Found: #{report.entities}",
-          ""
-        ]
+    header_box =
+      Owl.Box.new(header_content, title: "Ragex Analysis Report", border_style: :solid_rounded, padding_x: 1, padding_y: 0)
+      |> Owl.Data.to_chardata()
+      |> IO.ANSI.format()
+      |> IO.iodata_to_binary()
 
-    # Results sections
-    Enum.reduce(report.results, lines, fn {type, data}, acc ->
-      case type do
-        :security ->
-          acc ++ format_security_section(data)
+    sections = [
+      header_box,
+      format_security_section(Map.get(report.results, :security)),
+      format_complexity_section(Map.get(report.results, :complexity)),
+      format_smells_section(Map.get(report.results, :smells)),
+      format_duplicates_section(Map.get(report.results, :duplicates)),
+      format_dead_code_section(Map.get(report.results, :dead_code)),
+      format_dependencies_section(Map.get(report.results, :dependencies)),
+      format_quality_section(Map.get(report.results, :quality))
+    ]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join("\n\n")
 
-        :complexity ->
-          acc ++ format_complexity_section(data)
+    # Summary box at the end
+    summary_box = format_summary_box(report.results)
 
-        :smells ->
-          acc ++ format_smells_section(data)
+    "\n" <> sections <> "\n\n" <> summary_box <> "\n"
+  end
 
-        :duplicates ->
-          acc ++ format_duplicates_section(data)
+  defp format_timestamp(timestamp) do
+    timestamp
+    |> DateTime.to_string()
+    |> String.replace("Z", " UTC")
+  end
 
-        :dead_code ->
-          acc ++ format_dead_code_section(data)
-
-        :dependencies ->
-          acc ++ format_dependencies_section(data)
-
-        :quality ->
-          acc ++ format_quality_section(data)
-
-        _ ->
-          acc
-      end
+  defp format_security_section(nil), do: nil
+  defp format_security_section(%{issues: issues}) when is_list(issues) do
+    # Extract all vulnerabilities from analysis results
+    all_vulns = Enum.flat_map(issues, fn result ->
+      Map.get(result, :vulnerabilities, [])
     end)
-    |> Enum.join("\n")
+
+    count = length(all_vulns)
+
+    if count == 0 do
+      success_box("Security Issues", "No security issues found")
+    else
+      # Group by severity
+      by_severity = Enum.group_by(all_vulns, & &1.severity)
+
+      critical = length(Map.get(by_severity, :critical, []))
+      high = length(Map.get(by_severity, :high, []))
+      medium = length(Map.get(by_severity, :medium, []))
+      low = length(Map.get(by_severity, :low, []))
+
+      header_text = Owl.Data.tag("Security Issues: #{count}", :red) |> Owl.Data.to_chardata() |> IO.ANSI.format() |> IO.iodata_to_binary()
+      header = [
+        header_text,
+        "Critical: #{critical} | High: #{high} | Medium: #{medium} | Low: #{low}"
+      ]
+
+      # Show top issues
+      top_issues = all_vulns |> Enum.take(10)
+
+      rows = Enum.map(top_issues, fn issue ->
+        %{
+          "Severity" => severity_badge(issue.severity),
+          "Category" => to_string(issue.category || "Unknown"),
+          "File" => Path.relative_to_cwd(issue.file),
+          "Location" => format_location(issue),
+          "Description" => truncate(issue.description, 60)
+        }
+      end)
+
+      table_output = if count > 0 do
+        Owl.Table.new(rows)
+        |> Owl.Data.to_chardata()
+        |> IO.ANSI.format()
+        |> IO.iodata_to_binary()
+      else
+        ""
+      end
+
+      [Enum.join(header, "\n"), table_output, show_more_message(count, 10)]
+      |> Enum.reject(&(&1 == ""))
+      |> Enum.join("\n")
+    end
   end
 
-  defp format_security_section(%{issues: issues}) do
-    count = length(issues)
-    color_fn = if count > 0, do: &Colors.error/1, else: &Colors.success/1
+  defp format_complexity_section(nil), do: nil
+  defp format_complexity_section(%{complex_functions: functions}) when is_list(functions) do
+    # Filter out non-map entries (defensive)
+    valid_functions = Enum.filter(functions, &is_map/1)
+    count = length(valid_functions)
 
-    [
-      Colors.header("Security Issues"),
-      color_fn.("Found #{count} security issue(s)"),
-      ""
-    ]
+    if count == 0 do
+      success_box("Complexity", "No overly complex functions found")
+    else
+      header = Owl.Data.tag("Complex Functions: #{count}", :yellow) |> Owl.Data.to_chardata() |> IO.ANSI.format() |> IO.iodata_to_binary()
+
+      # Show functions by complexity
+      top_complex = valid_functions |> Enum.sort_by(& Map.get(&1, :cyclomatic_complexity, 0), :desc) |> Enum.take(15)
+
+      rows = Enum.map(top_complex, fn func ->
+        complexity = func.cyclomatic_complexity
+        color_fn = cond do
+          complexity >= 20 -> :red
+          complexity >= 15 -> :yellow
+          true -> :cyan
+        end
+
+        %{
+          "Complexity" => Owl.Data.tag(to_string(complexity), color_fn),
+          "Function" => "#{func.module}.#{func.name}/#{func.arity}",
+          "File" => Path.relative_to_cwd(func.file || ""),
+          "Location" => if(func.line, do: "Line #{func.line}", else: "")
+        }
+      end)
+
+      table_output = Owl.Table.new(rows)
+      |> Owl.Data.to_chardata()
+      |> IO.ANSI.format()
+      |> IO.iodata_to_binary()
+
+      [header, table_output, show_more_message(count, 15)]
+      |> Enum.reject(&(&1 == ""))
+      |> Enum.join("\n")
+    end
   end
 
-  defp format_complexity_section(%{complex_functions: functions}) do
-    count = length(functions)
-    color_fn = if count > 0, do: &Colors.warning/1, else: &Colors.success/1
+  defp format_smells_section(nil), do: nil
+  defp format_smells_section(%{smells: %{results: results, total_smells: total}}) when is_list(results) do
+    # Extract all smells from file results
+    all_smells = Enum.flat_map(results, fn file_result ->
+      Map.get(file_result, :smells, [])
+    end)
 
-    [
-      Colors.header("Complex Functions"),
-      color_fn.("Found #{count} complex function(s)"),
-      ""
-    ]
+    count = total
+
+    if count == 0 do
+      success_box("Code Smells", "No code smells detected")
+    else
+      header = Owl.Data.tag("Code Smells: #{count}", :yellow) |> Owl.Data.to_chardata() |> IO.ANSI.format() |> IO.iodata_to_binary()
+
+      # Group by type
+      by_type = Enum.group_by(all_smells, & &1.type)
+      type_summary = Enum.map_join(by_type, " | ", fn {type, items} ->
+        "#{type}: #{length(items)}"
+      end)
+
+      top_smells = all_smells |> Enum.take(12)
+
+      rows = Enum.map(top_smells, fn smell ->
+        location = case smell do
+          %{location: loc} when is_binary(loc) -> loc
+          %{file: file} when is_binary(file) -> file
+          %{path: path} when is_binary(path) -> path
+          _ -> "unknown"
+        end
+        
+        %{
+          "Type" => to_string(smell.type || "unknown"),
+          "Severity" => severity_badge(smell.severity),
+          "Location" => location,
+          "Message" => truncate(smell.description || smell[:message] || "No description", 50)
+        }
+      end)
+
+      table_output = Owl.Table.new(rows)
+      |> Owl.Data.to_chardata()
+      |> IO.ANSI.format()
+      |> IO.iodata_to_binary()
+
+      [header, type_summary, table_output, show_more_message(count, 12)]
+      |> Enum.reject(&(&1 == ""))
+      |> Enum.join("\n")
+    end
   end
 
-  defp format_smells_section(%{smells: smells}) do
-    count = length(smells.results)
-    color_fn = if count > 0, do: &Colors.warning/1, else: &Colors.success/1
-
-    [
-      Colors.header("Code Smells"),
-      color_fn.("Found #{count} code smell(s)"),
-      ""
-    ]
-  end
-
+  defp format_duplicates_section(nil), do: nil
   defp format_duplicates_section(%{duplicates: duplicates}) do
     count = length(duplicates)
-    color_fn = if count > 0, do: &Colors.warning/1, else: &Colors.success/1
 
-    [
-      Colors.header("Code Duplicates"),
-      color_fn.("Found #{count} duplicate block(s)"),
-      ""
-    ]
+    if count == 0 do
+      success_box("Code Duplicates", "No duplicate code blocks found")
+    else
+      header = Owl.Data.tag("Duplicate Code Blocks: #{count}", :yellow) |> Owl.Data.to_chardata() |> IO.ANSI.format() |> IO.iodata_to_binary()
+
+      # Calculate stats - handle different data structures
+      avg_similarity = if count > 0 do
+        Enum.reduce(duplicates, 0.0, fn dup, acc -> acc + (dup[:similarity] || dup.similarity || 0.0) end) / count
+      else
+        0.0
+      end
+
+      stats = "Total Duplicates: #{count} | Avg Similarity: #{Float.round(avg_similarity * 100, 1)}%"
+
+      top_duplicates = duplicates |> Enum.take(10)
+
+      rows = Enum.map(top_duplicates, fn dup ->
+        # Handle different duplicate data structures
+        similarity = (dup[:similarity] || dup.similarity || 0.0)
+        
+        # Extract location information
+        {file1, file2, loc_info} = case dup do
+          %{file1: f1, file2: f2} ->
+            {f1, f2, "#{Path.relative_to_cwd(f1)} <-> #{Path.relative_to_cwd(f2)}"}
+          %{locations: locs} when is_list(locs) ->
+            loc_str = locs
+              |> Enum.take(2)
+              |> Enum.map_join(", ", fn loc ->
+                file = Path.relative_to_cwd(loc[:file] || loc.file || "")
+                start = loc[:start_line] || loc.start_line
+                if start, do: "#{file}:#{start}", else: file
+              end)
+            loc_str = if length(locs) > 2, do: loc_str <> "...", else: loc_str
+            {nil, nil, loc_str}
+          _ ->
+            {nil, nil, "unknown"}
+        end
+        
+        clone_type = dup[:clone_type] || dup[:type] || dup.type || "unknown"
+
+        %{
+          "Type" => to_string(clone_type),
+          "Similarity" => "#{Float.round(similarity * 100, 1)}%",
+          "Locations" => truncate(loc_info, 80)
+        }
+      end)
+
+      table_output = Owl.Table.new(rows)
+      |> Owl.Data.to_chardata()
+      |> IO.ANSI.format()
+      |> IO.iodata_to_binary()
+
+      [header, stats, table_output, show_more_message(count, 10)]
+      |> Enum.reject(&(&1 == ""))
+      |> Enum.join("\n")
+    end
   end
 
+  defp format_dead_code_section(nil), do: nil
   defp format_dead_code_section(%{dead_functions: functions}) do
     count = length(functions)
-    color_fn = if count > 0, do: &Colors.info/1, else: &Colors.success/1
 
-    [
-      Colors.header("Dead Code"),
-      color_fn.("Found #{count} dead function(s)"),
-      ""
-    ]
+    if count == 0 do
+      success_box("Dead Code", "No dead code detected")
+    else
+      header = Owl.Data.tag("Dead Functions: #{count}", :cyan) |> Owl.Data.to_chardata() |> IO.ANSI.format() |> IO.iodata_to_binary()
+
+      # Group by module
+      by_module = Enum.group_by(functions, & &1.module)
+      module_summary = "Affected Modules: #{map_size(by_module)}"
+
+      top_dead = functions |> Enum.take(15)
+
+      rows = Enum.map(top_dead, fn func ->
+        # Handle different dead code data structures
+        {mod, name, arity, file, line} = case func do
+          %{function: {:function, m, n, a}, metadata: meta} ->
+            {m, n, a, meta[:file], meta[:line]}
+          %{module: m, name: n, arity: a, file: f, line: l} ->
+            {m, n, a, f, l}
+          %{module: m, metadata: %{name: n, arity: a, file: f, line: l}} ->
+            {m, n, a, f, l}
+          _ ->
+            {func[:module] || "unknown", func[:name] || "unknown", func[:arity] || 0, func[:file], func[:line]}
+        end
+
+        %{
+          "Function" => "#{mod}.#{name}/#{arity}",
+          "File" => if(file, do: Path.relative_to_cwd(file), else: ""),
+          "Location" => if(line, do: "Line #{line}", else: ""),
+          "Reason" => truncate(func[:reason] || func.reason || "Never called", 40)
+        }
+      end)
+
+      table_output = Owl.Table.new(rows)
+      |> Owl.Data.to_chardata()
+      |> IO.ANSI.format()
+      |> IO.iodata_to_binary()
+
+      [header, module_summary, table_output, show_more_message(count, 15)]
+      |> Enum.reject(&(&1 == ""))
+      |> Enum.join("\n")
+    end
   end
 
-  defp format_dependencies_section(%{modules: modules}) do
+  defp format_dependencies_section(nil), do: nil
+  defp format_dependencies_section(%{modules: modules}) when map_size(modules) == 0 do
+    nil
+  end
+  defp format_dependencies_section(%{modules: modules} = data) do
     count = map_size(modules)
+    header = Owl.Data.tag("Dependencies: #{count} modules", :cyan) |> Owl.Data.to_chardata() |> IO.ANSI.format() |> IO.iodata_to_binary()
 
-    [
-      Colors.header("Dependencies"),
-      Colors.info("Analyzed #{count} module(s)"),
-      ""
-    ]
+    # Show coupling metrics if available
+    coupling_info = case data do
+      %{coupling: coupling_data} when is_map(coupling_data) ->
+        avg_coupling = Map.get(coupling_data, :average, 0.0)
+        max_coupling = Map.get(coupling_data, :max, 0.0)
+        "Avg Coupling: #{Float.round(avg_coupling, 2)} | Max: #{Float.round(max_coupling, 2)}"
+      _ ->
+        ""
+    end
+
+    # Show top modules by dependencies
+    top_modules = modules
+      |> Enum.map(fn {mod, info} ->
+        deps = length(Map.get(info, :dependencies, []))
+        {mod, deps}
+      end)
+      |> Enum.sort_by(fn {_, deps} -> deps end, :desc)
+      |> Enum.take(10)
+
+    if length(top_modules) > 0 do
+      rows = Enum.map(top_modules, fn {mod, deps} ->
+        %{"Module" => to_string(mod), "Dependencies" => to_string(deps)}
+      end)
+
+      table_output = Owl.Table.new(rows)
+      |> Owl.Data.to_chardata()
+      |> IO.ANSI.format()
+      |> IO.iodata_to_binary()
+
+      [header, coupling_info, table_output]
+      |> Enum.reject(&(&1 == ""))
+      |> Enum.join("\n")
+    else
+      [header, coupling_info]
+      |> Enum.reject(&(&1 == ""))
+      |> Enum.join("\n")
+    end
   end
 
+  defp format_quality_section(nil), do: nil
   defp format_quality_section(metrics) do
     score = metrics.overall_score || 0
 
-    color_fn =
-      cond do
-        score >= 80 -> &Colors.success/1
-        score >= 60 -> &Colors.warning/1
-        true -> &Colors.error/1
-      end
+    color = cond do
+      score >= 80 -> :green
+      score >= 60 -> :yellow
+      true -> :red
+    end
 
-    [
-      Colors.header("Quality Metrics"),
-      color_fn.("Overall Score: #{score}/100"),
-      ""
+    header = Owl.Data.tag("Quality Score: #{score}/100", color) |> Owl.Data.to_chardata() |> IO.ANSI.format() |> IO.iodata_to_binary()
+
+    # Show component scores if available
+    components = [
+      {"Maintainability", metrics[:maintainability]},
+      {"Complexity", metrics[:complexity_score]},
+      {"Duplication", metrics[:duplication_score]},
+      {"Test Coverage", metrics[:test_coverage]},
+      {"Documentation", metrics[:documentation_score]}
     ]
+    |> Enum.reject(fn {_, v} -> is_nil(v) end)
+
+    if length(components) > 0 do
+      rows = Enum.map(components, fn {name, value} ->
+        score_val = if is_number(value), do: Float.round(value * 1.0, 1), else: value
+        color = cond do
+          is_number(score_val) and score_val >= 80 -> :green
+          is_number(score_val) and score_val >= 60 -> :yellow
+          is_number(score_val) -> :red
+          true -> :white
+        end
+        %{"Metric" => name, "Score" => Owl.Data.tag(to_string(score_val), color)}
+      end)
+
+      table_output = Owl.Table.new(rows)
+      |> Owl.Data.to_chardata()
+      |> IO.ANSI.format()
+      |> IO.iodata_to_binary()
+
+      [header, table_output]
+      |> Enum.join("\n")
+    else
+      header
+    end
   end
+
+  defp format_summary_box(results) do
+    summary_content = [
+      "Security Issues:   #{count_items(results, :security, :issues)}",
+      "Complex Functions: #{count_items(results, :complexity, :complex_functions)}",
+      "Code Smells:       #{count_smell_items(results)}",
+      "Duplicate Blocks:  #{count_items(results, :duplicates, :duplicates)}",
+      "Dead Functions:    #{count_items(results, :dead_code, :dead_functions)}",
+      "Quality Score:     #{quality_score_display(results)}"
+    ] |> Enum.join("\n")
+
+    Owl.Box.new(summary_content, title: "Analysis Summary", border_style: :solid_rounded, padding_x: 1, padding_y: 0)
+    |> Owl.Data.to_chardata()
+    |> IO.ANSI.format()
+    |> IO.iodata_to_binary()
+  end
+
+  defp count_items(results, type, key) do
+    case Map.get(results, type) do
+      nil -> 0
+      data -> length(Map.get(data, key, []))
+    end
+  end
+
+  defp count_smell_items(results) do
+    case Map.get(results, :smells) do
+      nil -> 0
+      %{smells: %{total_smells: total}} -> total
+      %{smells: %{smells: items}} when is_list(items) -> length(items)
+      %{smells: items} when is_list(items) -> length(items)
+      _ -> 0
+    end
+  end
+
+  defp quality_score_display(results) do
+    case Map.get(results, :quality) do
+      nil -> "N/A"
+      metrics -> "#{metrics.overall_score || 0}/100"
+    end
+  end
+
+  defp severity_badge(:critical), do: Owl.Data.tag("CRITICAL", :red)
+  defp severity_badge(:high), do: Owl.Data.tag("HIGH", :red)
+  defp severity_badge(:medium), do: Owl.Data.tag("MEDIUM", :yellow)
+  defp severity_badge(:low), do: Owl.Data.tag("LOW", :cyan)
+  defp severity_badge(_), do: "UNKNOWN"
+
+  defp truncate(text, max_length) when is_binary(text) do
+    if String.length(text) > max_length do
+      String.slice(text, 0, max_length - 3) <> "..."
+    else
+      text
+    end
+  end
+  defp truncate(text, _), do: to_string(text)
+
+  defp show_more_message(total, shown) when total > shown do
+    Owl.Data.tag("... and #{total - shown} more", :faint) |> Owl.Data.to_chardata() |> IO.ANSI.format() |> IO.iodata_to_binary()
+  end
+  defp show_more_message(_, _), do: ""
+
+  defp success_box(title, message) do
+    Owl.Box.new(Owl.Data.tag(message, :green),
+      title: title,
+      border_style: :solid,
+      border_tag: :green,
+      padding_x: 1
+    )
+    |> Owl.Data.to_chardata()
+    |> IO.ANSI.format()
+    |> IO.iodata_to_binary()
+  end
+
+  defp format_location(%{line: line, column: col}) when not is_nil(line) and not is_nil(col) do
+    "Line #{line}:#{col}"
+  end
+  defp format_location(%{line: line}) when not is_nil(line), do: "Line #{line}"
+  defp format_location(%{context: %{line: line}}) when not is_nil(line), do: "Line #{line}"
+  defp format_location(_), do: ""
 end
