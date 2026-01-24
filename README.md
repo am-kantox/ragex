@@ -336,6 +336,19 @@ Ragex is an MCP (Model Context Protocol) server that analyzes codebases using co
       ▹ Support Operations: rename_function, rename_module, extract_function, inline_function, move_function, change_signature  
       ▹ MCP Tools: `analyze_impact`, `estimate_refactoring_effort`, `risk_assessment`
 
+    ▸ Code Smells Detection (Metastatic Integration)  
+      ▹ Long Function: Functions with too many statements (default: >50)  
+      ▹ Deep Nesting: Excessive nesting depth (default: >4 levels)  
+      ▹ Magic Numbers: Unexplained numeric literals in expressions  
+      ▹ Complex Conditionals: Deeply nested boolean operations  
+      ▹ Long Parameter List: Too many parameters (default: >5)  
+      ▹ Configurable Thresholds: Custom limits per project  
+      ▹ Severity Levels: Critical, high, medium, low  
+      ▹ Actionable Suggestions: Refactoring recommendations for each smell  
+      ▹ Directory Scanning: Recursive analysis with parallel processing  
+      ▹ Filtering: By severity or smell type  
+      ▹ MCP Tool: `detect_smells`
+
     ▸ Quality Metrics (Metastatic Integration)  
       ▹ Complexity Metrics (Full Suite):  
         • Cyclomatic Complexity: McCabe metric (decision points + 1)  

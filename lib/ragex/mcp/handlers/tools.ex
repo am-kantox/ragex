@@ -14,6 +14,7 @@ defmodule Ragex.MCP.Handlers.Tools do
     MetastaticBridge,
     QualityStore,
     Security,
+    Smells,
     Suggestions
   }
 
@@ -1759,6 +1760,72 @@ defmodule Ragex.MCP.Handlers.Tools do
             },
             required: ["path"]
           }
+        },
+        %{
+          name: "detect_smells",
+          description:
+            "Detect code smells (long functions, deep nesting, magic numbers, complex conditionals) - Phase 3",
+          inputSchema: %{
+            type: "object",
+            properties: %{
+              path: %{
+                type: "string",
+                description: "File or directory path to analyze"
+              },
+              recursive: %{
+                type: "boolean",
+                description: "Recursively analyze directories",
+                default: true
+              },
+              min_severity: %{
+                type: "string",
+                description: "Minimum severity level to report",
+                enum: ["low", "medium", "high", "critical"],
+                default: "low"
+              },
+              thresholds: %{
+                type: "object",
+                description: "Custom thresholds for smell detection",
+                properties: %{
+                  max_statements: %{
+                    type: "integer",
+                    description: "Maximum statements per function",
+                    default: 50
+                  },
+                  max_nesting: %{
+                    type: "integer",
+                    description: "Maximum nesting depth",
+                    default: 4
+                  },
+                  max_parameters: %{
+                    type: "integer",
+                    description: "Maximum parameters per function",
+                    default: 5
+                  },
+                  max_cognitive: %{
+                    type: "integer",
+                    description: "Maximum cognitive complexity",
+                    default: 15
+                  }
+                }
+              },
+              smell_types: %{
+                type: "array",
+                description: "Filter by specific smell types (empty = all)",
+                items: %{
+                  type: "string",
+                  enum: [
+                    "long_function",
+                    "deep_nesting",
+                    "magic_number",
+                    "complex_conditional",
+                    "long_parameter_list"
+                  ]
+                }
+              }
+            },
+            required: ["path"]
+          }
         }
       ]
     }
@@ -1949,6 +2016,9 @@ defmodule Ragex.MCP.Handlers.Tools do
 
       "check_secrets" ->
         check_secrets_tool(arguments)
+
+      "detect_smells" ->
+        detect_smells_tool(arguments)
 
       _ ->
         {:error, "Unknown tool: #{tool_name}"}
@@ -6417,6 +6487,135 @@ defmodule Ragex.MCP.Handlers.Tools do
               path: path,
               total_secrets: length(secrets),
               secrets: secrets
+            }
+
+          {:error, reason} ->
+            %{status: "error", error: inspect(reason)}
+        end
+      end
+
+    {:ok, result}
+  end
+
+  # Code Smells Analysis Tool - Phase 3
+
+  defp detect_smells_tool(%{"path" => path} = params) do
+    recursive = Map.get(params, "recursive", true)
+    min_severity = Map.get(params, "min_severity", "low") |> String.to_atom()
+    thresholds = Map.get(params, "thresholds", %{})
+    smell_types = Map.get(params, "smell_types", [])
+
+    # Convert string keys to atoms for thresholds
+    thresholds =
+      thresholds
+      |> Enum.map(fn {k, v} -> {String.to_atom(k), v} end)
+      |> Map.new()
+
+    opts = [
+      recursive: recursive,
+      min_severity: min_severity,
+      thresholds: thresholds
+    ]
+
+    result =
+      if File.dir?(path) do
+        case Smells.analyze_directory(path, opts) do
+          {:ok, dir_result} ->
+            # Filter by smell types if specified
+            filtered_results =
+              if smell_types != [] do
+                smell_types_atoms = Enum.map(smell_types, &String.to_atom/1)
+
+                dir_result.results
+                |> Enum.map(fn result ->
+                  filtered_smells =
+                    Enum.filter(result.smells, &(&1.type in smell_types_atoms))
+
+                  %{result | smells: filtered_smells, total_smells: length(filtered_smells)}
+                end)
+                |> Enum.reject(&(&1.total_smells == 0))
+              else
+                dir_result.results
+              end
+
+            total_smells = Enum.sum(Enum.map(filtered_results, & &1.total_smells))
+
+            by_severity =
+              filtered_results
+              |> Enum.flat_map(& &1.smells)
+              |> Enum.reduce(%{}, fn smell, acc ->
+                Map.update(acc, smell.severity, 1, &(&1 + 1))
+              end)
+
+            by_type =
+              filtered_results
+              |> Enum.flat_map(& &1.smells)
+              |> Enum.reduce(%{}, fn smell, acc ->
+                Map.update(acc, smell.type, 1, &(&1 + 1))
+              end)
+
+            all_smells =
+              filtered_results
+              |> Enum.flat_map(fn result ->
+                Enum.map(result.smells, fn smell ->
+                  %{
+                    file: result.path,
+                    type: smell.type,
+                    severity: smell.severity,
+                    description: smell.description,
+                    suggestion: smell.suggestion,
+                    context: smell.context
+                  }
+                end)
+              end)
+
+            %{
+              status: "success",
+              scan_type: "directory",
+              path: path,
+              total_files: length(filtered_results),
+              files_with_smells: length(filtered_results),
+              total_smells: total_smells,
+              by_severity: by_severity,
+              by_type: by_type,
+              smells: all_smells,
+              summary: dir_result.summary
+            }
+
+          {:error, reason} ->
+            %{status: "error", error: inspect(reason)}
+        end
+      else
+        case Smells.analyze_file(path, opts) do
+          {:ok, result} ->
+            # Filter by smell types if specified
+            filtered_smells =
+              if smell_types != [] do
+                smell_types_atoms = Enum.map(smell_types, &String.to_atom/1)
+                Enum.filter(result.smells, &(&1.type in smell_types_atoms))
+              else
+                result.smells
+              end
+
+            %{
+              status: "success",
+              scan_type: "file",
+              path: path,
+              has_smells: length(filtered_smells) > 0,
+              total_smells: length(filtered_smells),
+              by_severity: result.by_severity,
+              by_type: result.by_type,
+              smells:
+                Enum.map(filtered_smells, fn smell ->
+                  %{
+                    type: smell.type,
+                    severity: smell.severity,
+                    description: smell.description,
+                    suggestion: smell.suggestion,
+                    context: smell.context
+                  }
+                end),
+              summary: result.summary
             }
 
           {:error, reason} ->
