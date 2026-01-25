@@ -379,8 +379,8 @@ defmodule Mix.Tasks.Ragex.Analyze do
 
   defp run_dependencies_analysis(_config) do
     case DependencyGraph.analyze_all_dependencies() do
+      # {:error, _} -> %{modules: %{}}
       {:ok, analysis} -> analysis
-      {:error, _} -> %{modules: %{}}
     end
   end
 

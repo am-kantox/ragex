@@ -448,7 +448,8 @@ defmodule Ragex.Analysis.Quality do
     operator = Keyword.get(opts, :operator, :gt)
     limit = Keyword.get(opts, :limit, 20)
 
-    QualityStore.find_by_threshold(metric, threshold, operator: operator)
+    metric
+    |> QualityStore.find_by_threshold(threshold, operator: operator)
     |> Enum.take(limit)
   end
 
@@ -986,9 +987,9 @@ defmodule Ragex.Analysis.Quality do
 
       metrics = %{
         overall_score: calculate_quality_score(stats),
-        files_analyzed: stats.total_files || 0,
-        average_complexity: stats.avg_cyclomatic || 0,
-        max_complexity: stats.max_cyclomatic || 0,
+        files_analyzed: stats.total_files,
+        average_complexity: stats.avg_cyclomatic,
+        max_complexity: stats.max_cyclomatic,
         complex_functions: length(complex),
         complex_function_list: complex,
         statistics: stats
@@ -1000,9 +1001,9 @@ defmodule Ragex.Analysis.Quality do
 
   # Calculate overall quality score based on various metrics
   defp calculate_quality_score(stats) do
-    avg_cyclomatic = stats.avg_cyclomatic || 0
-    max_cyclomatic = stats.max_cyclomatic || 0
-    avg_cognitive = stats.avg_cognitive || 0
+    avg_cyclomatic = stats.avg_cyclomatic
+    max_cyclomatic = stats.max_cyclomatic
+    avg_cognitive = stats.avg_cognitive
 
     # Base score from average complexity (lower is better)
     complexity_score = max(0, 100 - avg_cyclomatic * 5)

@@ -116,12 +116,14 @@ defmodule Ragex.Analysis.QualityStore do
   def find_by_threshold(metric, threshold, opts \\ []) do
     operator = Keyword.get(opts, :operator, :gt)
 
-    Store.list_nodes(@quality_metrics_type, :infinity)
-    |> Enum.filter(fn node ->
-      value = Map.get(node.data, metric)
-      value != nil and compare(value, threshold, operator)
+    @quality_metrics_type
+    |> Store.list_nodes(:infinity)
+    |> Enum.reduce([], fn node, acc ->
+      with value when not is_nil(value) <- Map.get(node.data, metric),
+           true <- compare(value, threshold, operator),
+           do: [node.data.path | acc],
+           else: (_ -> acc)
     end)
-    |> Enum.map(fn node -> node.data.path end)
   end
 
   @doc """

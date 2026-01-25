@@ -25,7 +25,9 @@ defmodule Ragex.Analysis.DeadCode do
 
   require Logger
 
-  @type function_ref :: {:function, module(), atom(), non_neg_integer()}
+  @type function_ref ::
+          {:function, module(), atom(), non_neg_integer()}
+          | %{type: :function, module: module(), name: atom(), arity: non_neg_integer()}
   @type confidence :: float()
   @type dead_function :: %{
           function: function_ref(),
@@ -513,7 +515,8 @@ defmodule Ragex.Analysis.DeadCode do
 
   # Analyze a function to determine if it's dead code
   defp analyze_function(%{id: {module, name, arity}, data: metadata}) do
-    func_ref = {:function, module, name, arity}
+    # func_ref = {:function, module, name, arity}
+    func_ref = %{type: :function, module: module, name: name, arity: arity}
     caller_count = count_callers(func_ref)
 
     if caller_count == 0 do
@@ -594,6 +597,9 @@ defmodule Ragex.Analysis.DeadCode do
   # Extract module, name, arity from function reference
   defp extract_func_parts({:function, module, name, arity}), do: {module, name, arity}
 
+  defp extract_func_parts(%{type: :function, module: module, name: name, arity: arity}),
+    do: {module, name, arity}
+
   # Create a suggestion from a dead function
   defp create_suggestion(%{function: func_ref, confidence: confidence} = dead_func) do
     {module, name, arity} = extract_func_parts(func_ref)
@@ -624,6 +630,8 @@ defmodule Ragex.Analysis.DeadCode do
 
   # Extract module from function reference
   defp extract_module({:function, module, _name, _arity}), do: module
+  defp extract_module(%{type: :function, module: module}), do: module
+  defp extract_module({:module, module}), do: module
 
   # Conditionally refine confidence scores with AI
   defp maybe_refine_with_ai(dead_functions, ai_refine, opts) do
@@ -707,8 +715,9 @@ defmodule Ragex.Analysis.DeadCode do
   """
   @spec find_dead_code() :: {:ok, [map()]} | {:error, term()}
   def find_dead_code do
-    {:ok, exports} = find_unused_exports()
-    {:ok, private} = find_unused_private()
-    {:ok, exports ++ private}
+    with {:ok, exports} <- find_unused_exports(),
+         {:ok, private} <- find_unused_private() do
+      {:ok, exports ++ private}
+    end
   end
 end
