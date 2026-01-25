@@ -377,14 +377,20 @@ defmodule Ragex.Analysis.BusinessLogic do
   end
 
   defp format_issue(meta_issue) do
+    message = Map.get(meta_issue, :description) || Map.get(meta_issue, :message, "No description")
+
     %{
       analyzer: meta_issue.analyzer,
       category: meta_issue.category,
       severity: meta_issue.severity,
-      description: meta_issue.message,
+      message: message,
+      description: message,
       suggestion: Map.get(meta_issue, :suggestion),
       context: Map.get(meta_issue, :context, %{}),
-      location: format_location(meta_issue.location)
+      location: format_location(meta_issue.location),
+      line: get_in(meta_issue, [:location, :line]),
+      column: get_in(meta_issue, [:location, :column]),
+      file: Map.get(meta_issue, :file)
     }
   end
 
