@@ -582,27 +582,39 @@ defmodule Ragex.CLI.Output do
           # Handle different duplicate data structures
           similarity = dup[:similarity] || dup.similarity || 0.0
 
-          # Extract location information
-          {_file1, _file2, loc_info} =
+          # Extract and format location information
+          loc_info =
             case dup do
+              %{file1: f1, file2: f2, line1: l1, line2: l2} ->
+                # Two-file duplicate with line numbers
+                format_duplicate_locations([
+                  %{file: f1, line: l1},
+                  %{file: f2, line: l2}
+                ])
+
               %{file1: f1, file2: f2} ->
-                {f1, f2, "#{Path.relative_to_cwd(f1)} <-> #{Path.relative_to_cwd(f2)}"}
+                # Two-file duplicate without line numbers
+                format_duplicate_locations([
+                  %{file: f1, line: nil},
+                  %{file: f2, line: nil}
+                ])
 
               %{locations: locs} when is_list(locs) ->
-                loc_str =
+                # Multi-location duplicate - filter unique locations
+                unique_locs =
                   locs
-                  |> Enum.take(2)
-                  |> Enum.map_join(", ", fn loc ->
-                    file = Path.relative_to_cwd(loc[:file] || loc.file || "")
-                    start = loc[:start_line] || loc.start_line
-                    if start, do: "#{file}:#{start}", else: file
+                  |> Enum.map(fn loc ->
+                    %{
+                      file: loc[:file] || loc.file,
+                      line: loc[:start_line] || loc.start_line || loc[:line] || loc.line
+                    }
                   end)
+                  |> Enum.uniq_by(&{&1.file, &1.line})
 
-                loc_str = if length(locs) > 2, do: loc_str <> "...", else: loc_str
-                {nil, nil, loc_str}
+                format_duplicate_locations(unique_locs)
 
               _ ->
-                {nil, nil, "unknown"}
+                "unknown"
             end
 
           clone_type = dup[:clone_type] || dup[:type] || dup.type || "unknown"
@@ -610,7 +622,7 @@ defmodule Ragex.CLI.Output do
           %{
             "Type" => to_string(clone_type),
             "Similarity" => "#{Float.round(similarity * 100, 1)}%",
-            "Locations" => truncate(loc_info, 80)
+            "Locations" => truncate_from_right(loc_info, 80)
           }
         end)
 
@@ -953,4 +965,45 @@ defmodule Ragex.CLI.Output do
   defp smell_severity_order(:medium), do: 2
   defp smell_severity_order(:low), do: 1
   defp smell_severity_order(_), do: 0
+
+  # Format duplicate code locations with line numbers
+  defp format_duplicate_locations(locations) when is_list(locations) do
+    locations
+    |> Enum.take(2)
+    |> Enum.map(&format_single_duplicate_location/1)
+    |> Enum.join(" ↔ ")
+    |> then(fn str ->
+      if length(locations) > 2 do
+        "#{str} (+#{length(locations) - 2} more)"
+      else
+        str
+      end
+    end)
+  end
+
+  defp format_single_duplicate_location(%{file: file, line: line}) when is_binary(file) do
+    relative = Path.relative_to_cwd(file)
+
+    if line && is_integer(line) do
+      "#{relative}:#{line}"
+    else
+      relative
+    end
+  end
+
+  defp format_single_duplicate_location(_), do: "unknown"
+
+  # Truncate from the right, preserving the end of the string (filenames)
+  defp truncate_from_right(text, max_length) when is_binary(text) do
+    if String.length(text) > max_length do
+      # Calculate how much to keep from the end
+      keep_length = max_length - 3
+      # Get the last keep_length characters
+      "..." <> String.slice(text, -keep_length, keep_length)
+    else
+      text
+    end
+  end
+
+  defp truncate_from_right(text, _), do: to_string(text)
 end

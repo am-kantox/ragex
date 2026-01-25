@@ -548,10 +548,60 @@ defmodule Mix.Tasks.Ragex.Analyze do
   end
 
   defp format_markdown_duplicates(%{duplicates: duplicates}) do
+    formatted_duplicates =
+      Enum.map(duplicates, fn dup ->
+        # Extract unique locations with line numbers
+        locations =
+          case dup do
+            %{locations: locs} when is_list(locs) ->
+              locs
+              |> Enum.map(fn loc ->
+                file = loc[:file] || loc.file || "unknown"
+                line = loc[:start_line] || loc.start_line || loc[:line] || loc.line
+                %{file: file, line: line}
+              end)
+              |> Enum.uniq_by(&{&1.file, &1.line})
+
+            %{file1: f1, file2: f2, line1: l1, line2: l2} ->
+              [%{file: f1, line: l1}, %{file: f2, line: l2}]
+
+            %{file1: f1, file2: f2} ->
+              [%{file: f1, line: nil}, %{file: f2, line: nil}]
+
+            _ ->
+              []
+          end
+
+        # Format locations with line numbers
+        loc_str =
+          locations
+          |> Enum.take(2)
+          |> Enum.map(fn %{file: file, line: line} ->
+            if line && is_integer(line) do
+              "#{file}:#{line}"
+            else
+              file
+            end
+          end)
+          |> Enum.join(" ↔ ")
+          |> then(fn str ->
+            if length(locations) > 2 do
+              "#{str} (+#{length(locations) - 2} more)"
+            else
+              str
+            end
+          end)
+
+        similarity = (dup[:similarity] || dup.similarity || 0.0) * 100
+        lines = dup[:lines] || dup.lines || 0
+
+        "- **#{Float.round(similarity, 1)}% similar** (#{lines} lines): #{loc_str}"
+      end)
+
     """
     ## Code Duplicates (#{length(duplicates)})
 
-    #{Enum.map_join(duplicates, "\n", fn dup -> "- #{length(dup.locations)} duplicates (#{dup.similarity * 100}% similar, #{dup.lines} lines)" end)}
+    #{Enum.join(formatted_duplicates, "\n")}
     """
   end
 
