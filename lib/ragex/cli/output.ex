@@ -351,6 +351,7 @@ defmodule Ragex.CLI.Output do
       [
         header_box,
         format_security_section(Map.get(report.results, :security)),
+        format_business_logic_section(Map.get(report.results, :business_logic)),
         format_complexity_section(Map.get(report.results, :complexity)),
         format_smells_section(Map.get(report.results, :smells)),
         format_duplicates_section(Map.get(report.results, :duplicates)),
@@ -431,6 +432,101 @@ defmodule Ragex.CLI.Output do
         end
 
       [Enum.join(header, "\n"), table_output, show_more_message(count, 10)]
+      |> Enum.reject(&(&1 == ""))
+      |> Enum.join("\n")
+    end
+  end
+
+  defp format_business_logic_section(nil), do: nil
+
+  defp format_business_logic_section(data) when is_map(data) do
+    total = Map.get(data, :total_issues, 0)
+
+    if total == 0 do
+      success_box("Business Logic", "No business logic issues found")
+    else
+      by_severity = Map.get(data, :by_severity, %{})
+      by_analyzer = Map.get(data, :by_analyzer, %{})
+      results = Map.get(data, :results, [])
+
+      critical = Map.get(by_severity, :critical, 0)
+      high = Map.get(by_severity, :high, 0)
+      medium = Map.get(by_severity, :medium, 0)
+      low = Map.get(by_severity, :low, 0)
+      info = Map.get(by_severity, :info, 0)
+
+      header_text =
+        Owl.Data.tag("Business Logic Issues: #{total}", :yellow)
+        |> Owl.Data.to_chardata()
+        |> IO.ANSI.format()
+        |> IO.iodata_to_binary()
+
+      severity_summary =
+        "Critical: #{critical} | High: #{high} | Medium: #{medium} | Low: #{low} | Info: #{info}"
+
+      # Show top analyzers by issue count
+      top_analyzers =
+        by_analyzer
+        |> Enum.filter(fn {_name, count} -> count > 0 end)
+        |> Enum.sort_by(fn {_name, count} -> count end, :desc)
+        |> Enum.take(10)
+
+      analyzer_summary =
+        if length(top_analyzers) > 0 do
+          rows =
+            Enum.map(top_analyzers, fn {name, count} ->
+              %{"Analyzer" => to_string(name), "Issues" => to_string(count)}
+            end)
+
+          Owl.Table.new(rows)
+          |> Owl.Data.to_chardata()
+          |> IO.ANSI.format()
+          |> IO.iodata_to_binary()
+        else
+          ""
+        end
+
+      # Show sample issues from results
+      all_issues =
+        Enum.flat_map(results, fn result ->
+          Map.get(result, :issues, [])
+        end)
+
+      top_issues =
+        all_issues
+        |> Enum.sort_by(fn issue -> severity_order(Map.get(issue, :severity, :info)) end, :desc)
+        |> Enum.take(10)
+
+      issues_table =
+        if length(top_issues) > 0 do
+          rows =
+            Enum.map(top_issues, fn issue ->
+              %{
+                "Severity" => severity_badge(Map.get(issue, :severity, :info)),
+                "Analyzer" => truncate(to_string(Map.get(issue, :analyzer, "unknown")), 25),
+                "File" => Path.relative_to_cwd(Map.get(issue, :file, "")),
+                "Line" => to_string(Map.get(issue, :line, "")),
+                "Message" => truncate(Map.get(issue, :message, ""), 40)
+              }
+            end)
+
+          Owl.Table.new(rows)
+          |> Owl.Data.to_chardata()
+          |> IO.ANSI.format()
+          |> IO.iodata_to_binary()
+        else
+          ""
+        end
+
+      [
+        header_text,
+        severity_summary,
+        "\nTop Analyzers:",
+        analyzer_summary,
+        if(length(top_issues) > 0, do: "\nSample Issues:", else: ""),
+        issues_table,
+        show_more_message(total, 10)
+      ]
       |> Enum.reject(&(&1 == ""))
       |> Enum.join("\n")
     end
@@ -817,12 +913,13 @@ defmodule Ragex.CLI.Output do
   defp format_summary_box(results) do
     summary_content =
       [
-        "Security Issues:   #{count_items(results, :security, :issues)}",
-        "Complex Functions: #{count_items(results, :complexity, :complex_functions)}",
-        "Code Smells:       #{count_smell_items(results)}",
-        "Duplicate Blocks:  #{count_items(results, :duplicates, :duplicates)}",
-        "Dead Functions:    #{count_items(results, :dead_code, :dead_functions)}",
-        "Quality Score:     #{quality_score_display(results)}"
+        "Security Issues:      #{count_items(results, :security, :issues)}",
+        "Business Logic:       #{count_business_logic_items(results)}",
+        "Complex Functions:    #{count_items(results, :complexity, :complex_functions)}",
+        "Code Smells:          #{count_smell_items(results)}",
+        "Duplicate Blocks:     #{count_items(results, :duplicates, :duplicates)}",
+        "Dead Functions:       #{count_items(results, :dead_code, :dead_functions)}",
+        "Quality Score:        #{quality_score_display(results)}"
       ]
       |> Enum.join("\n")
 
@@ -854,6 +951,14 @@ defmodule Ragex.CLI.Output do
     end
   end
 
+  defp count_business_logic_items(results) do
+    case Map.get(results, :business_logic) do
+      nil -> 0
+      %{total_issues: total} -> total
+      _ -> 0
+    end
+  end
+
   defp quality_score_display(results) do
     case Map.get(results, :quality) do
       nil -> "N/A"
@@ -865,7 +970,16 @@ defmodule Ragex.CLI.Output do
   defp severity_badge(:high), do: Owl.Data.tag("HIGH", :red)
   defp severity_badge(:medium), do: Owl.Data.tag("MEDIUM", :yellow)
   defp severity_badge(:low), do: Owl.Data.tag("LOW", :cyan)
+  defp severity_badge(:info), do: Owl.Data.tag("INFO", :blue)
   defp severity_badge(_), do: "UNKNOWN"
+
+  # Severity ordering for sorting (higher number = more severe)
+  defp severity_order(:critical), do: 5
+  defp severity_order(:high), do: 4
+  defp severity_order(:medium), do: 3
+  defp severity_order(:low), do: 2
+  defp severity_order(:info), do: 1
+  defp severity_order(_), do: 0
 
   defp truncate(text, max_length) when is_binary(text) do
     if String.length(text) > max_length do
