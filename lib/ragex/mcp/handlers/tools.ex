@@ -6564,7 +6564,8 @@ defmodule Ragex.MCP.Handlers.Tools do
                     severity: smell.severity,
                     description: smell.description,
                     suggestion: smell.suggestion,
-                    context: smell.context
+                    context: smell.context,
+                    location: format_smell_location(smell)
                   }
                 end)
               end)
@@ -6614,7 +6615,8 @@ defmodule Ragex.MCP.Handlers.Tools do
                     severity: smell.severity,
                     description: smell.description,
                     suggestion: smell.suggestion,
-                    context: smell.context
+                    context: smell.context,
+                    location: format_smell_location(smell)
                   }
                 end),
               summary: result.summary
@@ -6677,5 +6679,51 @@ defmodule Ragex.MCP.Handlers.Tools do
     |> Enum.map_join("\n", fn rec ->
       "- **[#{rec.severity}]** #{rec.recommendation}"
     end)
+  end
+
+  # Format smell location for MCP response
+  defp format_smell_location(smell) do
+    case Map.get(smell, :location) do
+      nil ->
+        nil
+
+      location when is_map(location) ->
+        # Return the formatted string if available, otherwise build it
+        case Map.get(location, :formatted) do
+          formatted when is_binary(formatted) ->
+            formatted
+
+          _ ->
+            # Build location string from components
+            build_location_string(location)
+        end
+    end
+  end
+
+  defp build_location_string(location) do
+    module = Map.get(location, :module)
+    function = Map.get(location, :function)
+    arity = Map.get(location, :arity)
+    line = Map.get(location, :line)
+
+    cond do
+      module && function && arity && line ->
+        "#{inspect(module)}.#{function}/#{arity}:#{line}"
+
+      module && function && arity ->
+        "#{inspect(module)}.#{function}/#{arity}"
+
+      function && arity && line ->
+        "#{function}/#{arity}:#{line}"
+
+      function && arity ->
+        "#{function}/#{arity}"
+
+      line ->
+        "line #{line}"
+
+      true ->
+        nil
+    end
   end
 end

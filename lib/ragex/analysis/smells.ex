@@ -36,17 +36,35 @@ defmodule Ragex.Analysis.Smells do
   require Logger
   alias Metastatic.{Adapter, Document}
   alias Metastatic.Analysis.Smells, as: MetaSmells
+  alias Ragex.Graph.Store
 
   @type smell_result :: %{
           path: String.t(),
           language: atom(),
           has_smells?: boolean(),
           total_smells: non_neg_integer(),
-          smells: [map()],
+          smells: [smell_with_location()],
           by_severity: %{atom() => non_neg_integer()},
           by_type: %{atom() => non_neg_integer()},
           summary: String.t(),
           timestamp: DateTime.t()
+        }
+
+  @type smell_with_location :: %{
+          type: atom(),
+          severity: atom(),
+          description: String.t(),
+          suggestion: String.t(),
+          context: map(),
+          location: location() | nil
+        }
+
+  @type location :: %{
+          optional(:module) => atom(),
+          optional(:function) => atom(),
+          optional(:arity) => non_neg_integer(),
+          optional(:line) => non_neg_integer(),
+          optional(:formatted) => String.t()
         }
 
   @type directory_result :: %{
@@ -238,12 +256,15 @@ defmodule Ragex.Analysis.Smells do
   end
 
   defp format_result(path, language, result) do
+    # Enrich smells with knowledge graph function context
+    enriched_smells = enrich_smells_with_function_context(result.smells, path)
+
     %{
       path: path,
       language: language,
       has_smells?: result.has_smells?,
       total_smells: result.total_smells,
-      smells: result.smells,
+      smells: enriched_smells,
       by_severity: result.by_severity,
       by_type: result.by_type,
       summary: result.summary,
@@ -384,4 +405,148 @@ defmodule Ragex.Analysis.Smells do
   """
   @spec detect_smells(String.t(), keyword()) :: {:ok, [map()]} | {:error, term()}
   def detect_smells(path, opts \\ []), do: analyze_directory(path, opts)
+
+  # Private - Enrich smells with knowledge graph context
+
+  defp enrich_smells_with_function_context(smells, file_path) do
+    # Get all functions for this file from the knowledge graph
+    functions_in_file = get_functions_for_file(file_path)
+
+    Enum.map(smells, fn smell ->
+      # Try to find which function this smell belongs to
+      function_context = match_smell_to_function(smell, functions_in_file)
+
+      # Merge the function context with existing location
+      location =
+        case {Map.get(smell, :location), function_context} do
+          {nil, nil} ->
+            nil
+
+          {nil, func_ctx} ->
+            func_ctx
+
+          {loc, nil} ->
+            loc
+
+          {loc, func_ctx} when is_map(loc) and is_map(func_ctx) ->
+            Map.merge(func_ctx, loc)
+        end
+
+      # Add formatted location string if we have enough info
+      location_with_formatted =
+        if location do
+          Map.put(location, :formatted, format_location_string(location))
+        else
+          nil
+        end
+
+      Map.put(smell, :location, location_with_formatted)
+    end)
+  end
+
+  defp get_functions_for_file(file_path) do
+    # Normalize file path for comparison
+    normalized_path = Path.expand(file_path)
+
+    # Get all functions from the knowledge graph
+    try do
+      # Use a large limit instead of :infinity since Enum.take doesn't support it
+      Store.list_functions(limit: 100_000)
+      |> Enum.filter(fn func_node ->
+        case func_node.data do
+          %{file: file} when is_binary(file) ->
+            Path.expand(file) == normalized_path
+
+          _ ->
+            false
+        end
+      end)
+      |> Enum.map(fn func_node ->
+        {module, name, arity} = func_node.id
+
+        %{
+          module: module,
+          function: name,
+          arity: arity,
+          line: Map.get(func_node.data, :line),
+          file: Map.get(func_node.data, :file)
+        }
+      end)
+      |> Enum.sort_by(& &1.line, :asc)
+    catch
+      # If Store is not running, return empty list
+      :exit, _ -> []
+    end
+  end
+
+  defp match_smell_to_function(smell, functions_in_file) do
+    smell_line =
+      case Map.get(smell, :location) do
+        %{line: line} when is_integer(line) -> line
+        _ -> nil
+      end
+
+    # If we have a line number, find the function that contains this line
+    if smell_line && length(functions_in_file) > 0 do
+      # Find the function whose line is <= smell_line and is the closest
+      # (assumes functions are sorted by line)
+      functions_in_file
+      |> Enum.filter(fn func -> func.line && func.line <= smell_line end)
+      |> Enum.max_by(fn func -> func.line end, fn -> nil end)
+      |> case do
+        nil ->
+          # No function found, return the first function as fallback
+          List.first(functions_in_file)
+          |> case do
+            nil -> nil
+            func -> build_function_context(func)
+          end
+
+        func ->
+          build_function_context(func)
+      end
+    else
+      # No line info, can't match accurately
+      # Return the first function as a best guess if available
+      case List.first(functions_in_file) do
+        nil -> nil
+        func -> build_function_context(func)
+      end
+    end
+  end
+
+  defp build_function_context(func) do
+    %{
+      module: func.module,
+      function: func.function,
+      arity: func.arity
+    }
+  end
+
+  defp format_location_string(location) do
+    module = Map.get(location, :module)
+    function = Map.get(location, :function)
+    arity = Map.get(location, :arity)
+    line = Map.get(location, :line)
+
+    cond do
+      module && function && arity && line ->
+        "#{inspect(module)}.#{function}/#{arity}:#{line}"
+
+      module && function && arity ->
+        "#{inspect(module)}.#{function}/#{arity}"
+
+      function && arity && line ->
+        "#{function}/#{arity}:#{line}"
+
+      function && arity ->
+        "#{function}/#{arity}"
+
+      line ->
+        "line #{line}"
+
+      true ->
+        "unknown"
+    end
+  end
 end

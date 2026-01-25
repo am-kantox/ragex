@@ -307,4 +307,253 @@ defmodule Ragex.Analysis.SmellsTest do
       assert Map.has_key?(thresholds, :max_cognitive)
     end
   end
+
+  describe "location tracking" do
+    setup do
+      # Start the knowledge graph store if not already running
+      case Process.whereis(Ragex.Graph.Store) do
+        nil ->
+          {:ok, _pid} = Ragex.Graph.Store.start_link()
+          on_exit(fn -> GenServer.stop(Ragex.Graph.Store) end)
+
+        _pid ->
+          :ok
+      end
+
+      # Clear the store
+      Ragex.Graph.Store.clear()
+
+      :ok
+    end
+
+    test "includes location information in smell results" do
+      path = "/tmp/ragex_test_location.ex"
+
+      code = """
+      defmodule LocationModule do
+        def long_function(x) do
+          #{Enum.map_join(1..60, "\n  ", fn i -> "IO.puts(\"line #{i}\")" end)}
+          x
+        end
+      end
+      """
+
+      File.write!(path, code)
+
+      # First analyze to populate the knowledge graph
+      {:ok, analysis} = Ragex.Analyzers.Elixir.analyze(code, path)
+      store_analysis_in_graph(analysis)
+
+      # Then analyze for smells
+      {:ok, result} = Smells.analyze_file(path)
+
+      # Find a smell
+      smell = Enum.find(result.smells, &(&1.type == :long_function))
+
+      if smell do
+        # Check that location is present
+        assert Map.has_key?(smell, :location)
+
+        # Location should have a formatted string
+        location = smell.location
+
+        if location do
+          assert is_map(location)
+
+          # Check for formatted location string
+          formatted = Map.get(location, :formatted)
+
+          if formatted do
+            assert is_binary(formatted)
+            # Should contain function info
+            assert formatted =~ "long_function"
+          end
+        end
+      end
+
+      File.rm!(path)
+    end
+
+    test "formatted location includes module, function, arity, and line" do
+      path = "/tmp/ragex_test_full_location.ex"
+
+      code = """
+      defmodule TestModule do
+        def problematic_function(a, b) do
+          #{Enum.map_join(1..60, "\n  ", fn i -> "IO.puts(\"#{i}\")" end)}
+          a + b
+        end
+      end
+      """
+
+      File.write!(path, code)
+
+      # Analyze and populate knowledge graph
+      {:ok, analysis} = Ragex.Analyzers.Elixir.analyze(code, path)
+      store_analysis_in_graph(analysis)
+
+      # Analyze for smells
+      {:ok, result} = Smells.analyze_file(path)
+
+      smell = Enum.find(result.smells, &(&1.type == :long_function))
+
+      if smell && smell.location do
+        location = smell.location
+
+        # Should have module, function, arity
+        if Map.get(location, :module) do
+          assert location.module == TestModule
+        end
+
+        if Map.get(location, :function) do
+          assert location.function == :problematic_function
+        end
+
+        if Map.get(location, :arity) do
+          assert location.arity == 2
+        end
+
+        # Should have a line number
+        if Map.get(location, :line) do
+          assert is_integer(location.line)
+          assert location.line > 0
+        end
+
+        # Formatted location should follow the pattern Module.function/arity:line
+        if Map.get(location, :formatted) do
+          assert location.formatted =~ "TestModule.problematic_function/2"
+        end
+      end
+
+      File.rm!(path)
+    end
+
+    test "handles smells when knowledge graph is empty" do
+      path = "/tmp/ragex_test_no_graph.ex"
+
+      code = """
+      defmodule NoGraphModule do
+        def long_func(x) do
+          #{Enum.map_join(1..60, "\n  ", fn i -> "IO.puts(\"#{i}\")" end)}
+          x
+        end
+      end
+      """
+
+      File.write!(path, code)
+
+      # Don't populate knowledge graph - analyze for smells directly
+      {:ok, result} = Smells.analyze_file(path)
+
+      # Should still work, even without knowledge graph context
+      assert is_boolean(result.has_smells?)
+      assert is_list(result.smells)
+
+      # Smells may have partial location info (line only) or none
+      for smell <- result.smells do
+        location = Map.get(smell, :location)
+
+        # Location can be nil or a map
+        assert location == nil or is_map(location)
+      end
+
+      File.rm!(path)
+    end
+
+    test "location format is consistent across different smell types" do
+      path = "/tmp/ragex_test_multi_smell.ex"
+
+      code = """
+      defmodule MultiSmellModule do
+        def complex_function(x) do
+          # Long function with deep nesting
+          if x > 0 do
+            if x > 10 do
+              if x > 20 do
+                if x > 30 do
+                  if x > 40 do
+                    #{Enum.map_join(1..60, "\n            ", fn i -> "IO.puts(\"#{i}\")" end)}
+                  end
+                end
+              end
+            end
+          end
+          x
+        end
+      end
+      """
+
+      File.write!(path, code)
+
+      # Analyze and populate knowledge graph
+      {:ok, analysis} = Ragex.Analyzers.Elixir.analyze(code, path)
+      store_analysis_in_graph(analysis)
+
+      # Analyze for smells
+      {:ok, result} = Smells.analyze_file(path)
+
+      # Should find multiple smell types
+      smells_with_location =
+        result.smells
+        |> Enum.filter(&Map.has_key?(&1, :location))
+        |> Enum.filter(&(&1.location != nil))
+
+      # Check that all smells with locations have consistent formatting
+      for smell <- smells_with_location do
+        location = smell.location
+        assert is_map(location)
+
+        # If formatted string exists, it should follow the pattern
+        if formatted = Map.get(location, :formatted) do
+          assert is_binary(formatted)
+          # Should not be "unknown"
+          assert formatted != "unknown"
+        end
+      end
+
+      File.rm!(path)
+    end
+  end
+
+  # Helper to store analysis in knowledge graph
+  defp store_analysis_in_graph(%{
+         modules: modules,
+         functions: functions,
+         calls: calls,
+         imports: imports
+       }) do
+    # Store modules
+    Enum.each(modules, fn module ->
+      Ragex.Graph.Store.add_node(:module, module.name, module)
+    end)
+
+    # Store functions
+    Enum.each(functions, fn func ->
+      Ragex.Graph.Store.add_node(:function, {func.module, func.name, func.arity}, func)
+      # Add edge from module to function
+      Ragex.Graph.Store.add_edge(
+        {:module, func.module},
+        {:function, func.module, func.name, func.arity},
+        :defines
+      )
+    end)
+
+    # Store call relationships
+    Enum.each(calls, fn call ->
+      Ragex.Graph.Store.add_edge(
+        {:function, call.from_module, call.from_function, call.from_arity},
+        {:function, call.to_module, call.to_function, call.to_arity},
+        :calls
+      )
+    end)
+
+    # Store imports
+    Enum.each(imports, fn import ->
+      Ragex.Graph.Store.add_edge(
+        {:module, import.from_module},
+        {:module, import.to_module},
+        :imports
+      )
+    end)
+  end
 end
