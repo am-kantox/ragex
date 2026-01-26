@@ -28,6 +28,7 @@ defmodule Ragex.Analysis.Security do
       report = Security.audit_report(results)
   """
 
+  alias Metastatic.{Adapter, Document}
   alias Metastatic.Analysis.Security, as: MetaSecurity
   require Logger
 
@@ -74,7 +75,9 @@ defmodule Ragex.Analysis.Security do
     language = Keyword.get(opts, :language, detect_language(path))
 
     with {:ok, content} <- File.read(path),
-         {:ok, meta_result} <- MetaSecurity.analyze(language, content, opts) do
+         {:ok, adapter} <- get_adapter(language),
+         {:ok, doc} <- parse_document(adapter, content, language),
+         {:ok, meta_result} <- MetaSecurity.analyze(doc, opts) do
       result = build_result(path, language, meta_result)
       {:ok, result}
     else
@@ -178,7 +181,23 @@ defmodule Ragex.Analysis.Security do
       ".hrl" -> :erlang
       ".py" -> :python
       ".rb" -> :ruby
+      ".hs" -> :haskell
       _ -> :unknown
+    end
+  end
+
+  defp get_adapter(:elixir), do: {:ok, Metastatic.Adapters.Elixir}
+  defp get_adapter(:erlang), do: {:ok, Metastatic.Adapters.Erlang}
+  defp get_adapter(:python), do: {:ok, Metastatic.Adapters.Python}
+  defp get_adapter(:ruby), do: {:ok, Metastatic.Adapters.Ruby}
+  defp get_adapter(:haskell), do: {:ok, Metastatic.Adapters.Haskell}
+  defp get_adapter(lang), do: {:error, {:unsupported_language, lang}}
+
+  defp parse_document(adapter, content, language) do
+    case Adapter.abstract(adapter, content, language) do
+      {:ok, %Document{} = doc} -> {:ok, doc}
+      {:error, _} = error -> error
+      other -> {:error, {:unexpected_parse_result, other}}
     end
   end
 
