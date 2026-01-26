@@ -107,8 +107,8 @@ defmodule Ragex.Analyzers.Directory do
       results
       |> Enum.filter(&match?({:error, _}, &1))
       |> Enum.map(fn
-        {:error, {file, reason}} -> %{file: file, reason: reason}
         {:error, {:task_exit, reason}} -> %{file: "unknown", reason: {:task_exit, reason}}
+        {:error, {file, reason}} -> %{file: file, reason: reason}
       end)
 
     notify_progress("analysis_complete", %{
