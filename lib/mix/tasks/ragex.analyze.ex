@@ -534,16 +534,15 @@ defmodule Mix.Tasks.Ragex.Analyze do
     by_analyzer = Map.get(data, :by_analyzer, %{})
 
     severity_summary =
-      [:critical, :high, :medium, :low, :info]
-      |> Enum.map(fn sev -> "#{sev}: #{Map.get(by_severity, sev, 0)}" end)
-      |> Enum.join(", ")
+      Enum.map_join([:critical, :high, :medium, :low, :info], ", ", fn sev ->
+        "#{sev}: #{Map.get(by_severity, sev, 0)}"
+      end)
 
     analyzer_summary =
       by_analyzer
       |> Enum.filter(fn {_name, count} -> count > 0 end)
       |> Enum.sort_by(fn {_name, count} -> count end, :desc)
-      |> Enum.map(fn {name, count} -> "- **#{name}**: #{count}" end)
-      |> Enum.join("\n")
+      |> Enum.map_join("\n", fn {name, count} -> "- **#{name}**: #{count}" end)
 
     """
     ## Business Logic Issues (#{total})
@@ -661,7 +660,7 @@ defmodule Mix.Tasks.Ragex.Analyze do
         loc_str =
           locations
           |> Enum.take(2)
-          |> Enum.map(fn %{file: file, line: line} ->
+          |> Enum.map_join(" ↔ ", fn %{file: file, line: line} ->
             # Format with line number if available
             full_location =
               if line && is_integer(line) do
@@ -673,10 +672,11 @@ defmodule Mix.Tasks.Ragex.Analyze do
             # Truncate from right to preserve filename
             truncate_from_right_md(full_location, max_per_location)
           end)
-          |> Enum.join(" ↔ ")
           |> then(fn str ->
-            if length(locations) > 2 do
-              "#{str} (+#{length(locations) - 2} more)"
+            locations_len = length(locations)
+
+            if locations_len > 2 do
+              "#{str} (+#{locations_len - 2} more)"
             else
               str
             end

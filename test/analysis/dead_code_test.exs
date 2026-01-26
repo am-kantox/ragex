@@ -99,16 +99,16 @@ defmodule Ragex.Analysis.DeadCodeTest do
 
       # Should find unused_public but not used_public
       unused_funcs = Enum.map(dead, fn d -> d.function end)
-      assert {:function, :ModuleA, :unused_public, 0} in unused_funcs
-      refute {:function, :ModuleA, :used_public, 0} in unused_funcs
+      assert %{type: :function, module: :ModuleA, name: :unused_public, arity: 0} in unused_funcs
+      refute %{type: :function, module: :ModuleA, name: :used_public, arity: 0} in unused_funcs
     end
 
     test "does not include private functions" do
       {:ok, dead} = DeadCode.find_unused_exports()
 
       unused_funcs = Enum.map(dead, fn d -> d.function end)
-      refute {:function, :ModuleA, :unused_private, 0} in unused_funcs
-      refute {:function, :ModuleA, :used_private, 0} in unused_funcs
+      refute %{type: :function, module: :ModuleA, name: :unused_private, arity: 0} in unused_funcs
+      refute %{type: :function, module: :ModuleA, name: :used_private, arity: 0} in unused_funcs
     end
 
     test "filters by confidence threshold" do
@@ -122,14 +122,16 @@ defmodule Ragex.Analysis.DeadCodeTest do
       {:ok, dead} = DeadCode.find_unused_exports()
 
       unused_funcs = Enum.map(dead, fn d -> d.function end)
-      refute {:function, :MyModuleTest, :test_something, 0} in unused_funcs
+
+      refute %{type: :function, module: :MyModuleTest, name: :test_something, arity: 0} in unused_funcs
     end
 
     test "includes test modules when exclude_tests is false" do
       {:ok, dead} = DeadCode.find_unused_exports(exclude_tests: false, min_confidence: 0.0)
 
       unused_funcs = Enum.map(dead, fn d -> d.function end)
-      assert {:function, :MyModuleTest, :test_something, 0} in unused_funcs
+
+      assert %{type: :function, module: :MyModuleTest, name: :test_something, arity: 0} in unused_funcs
     end
 
     test "excludes callbacks by default" do
@@ -137,8 +139,9 @@ defmodule Ragex.Analysis.DeadCodeTest do
 
       # GenServer callbacks should not appear in high confidence dead code
       unused_funcs = Enum.map(dead, fn d -> d.function end)
-      refute {:function, :MyGenServer, :init, 1} in unused_funcs
-      refute {:function, :MyGenServer, :handle_call, 3} in unused_funcs
+      refute %{type: :function, module: :MyGenServer, name: :init, arity: 1} in unused_funcs
+
+      refute %{type: :function, module: :MyGenServer, name: :handle_call, arity: 3} in unused_funcs
     end
 
     test "includes callbacks when include_callbacks is true" do
@@ -146,8 +149,9 @@ defmodule Ragex.Analysis.DeadCodeTest do
 
       # Should include callbacks with low confidence scores
       unused_funcs = Enum.map(dead, fn d -> d.function end)
-      assert {:function, :MyGenServer, :init, 1} in unused_funcs
-      assert {:function, :MyGenServer, :handle_call, 3} in unused_funcs
+      assert %{type: :function, module: :MyGenServer, name: :init, arity: 1} in unused_funcs
+
+      assert %{type: :function, module: :MyGenServer, name: :handle_call, arity: 3} in unused_funcs
     end
 
     test "returns functions with confidence scores" do
@@ -173,16 +177,16 @@ defmodule Ragex.Analysis.DeadCodeTest do
 
       # Should find unused_private but not used_private
       unused_funcs = Enum.map(dead, fn d -> d.function end)
-      assert {:function, :ModuleA, :unused_private, 0} in unused_funcs
-      refute {:function, :ModuleA, :used_private, 0} in unused_funcs
+      assert %{type: :function, module: :ModuleA, name: :unused_private, arity: 0} in unused_funcs
+      refute %{type: :function, module: :ModuleA, name: :used_private, arity: 0} in unused_funcs
     end
 
     test "does not include public functions" do
       {:ok, dead} = DeadCode.find_unused_private()
 
       unused_funcs = Enum.map(dead, fn d -> d.function end)
-      refute {:function, :ModuleA, :unused_public, 0} in unused_funcs
-      refute {:function, :ModuleA, :used_public, 0} in unused_funcs
+      refute %{type: :function, module: :ModuleA, name: :unused_public, arity: 0} in unused_funcs
+      refute %{type: :function, module: :ModuleA, name: :used_public, arity: 0} in unused_funcs
     end
 
     test "has higher default confidence threshold" do
@@ -212,8 +216,8 @@ defmodule Ragex.Analysis.DeadCodeTest do
       {:ok, all_dead} = DeadCode.find_all_unused(min_confidence: 0.0)
 
       unused_funcs = Enum.map(all_dead, fn d -> d.function end)
-      assert {:function, :ModuleA, :unused_public, 0} in unused_funcs
-      assert {:function, :ModuleA, :unused_private, 0} in unused_funcs
+      assert %{type: :function, module: :ModuleA, name: :unused_public, arity: 0} in unused_funcs
+      assert %{type: :function, module: :ModuleA, name: :unused_private, arity: 0} in unused_funcs
     end
 
     test "sorts by confidence descending" do
@@ -449,7 +453,7 @@ defmodule Ragex.Analysis.DeadCodeTest do
 
       # Should default to public and include it
       unused_funcs = Enum.map(dead, fn d -> d.function end)
-      assert {:function, :NoMetadata, :func, 0} in unused_funcs
+      assert %{type: :function, module: :NoMetadata, name: :func, arity: 0} in unused_funcs
     end
 
     test "handles functions called multiple times" do
@@ -479,7 +483,7 @@ defmodule Ragex.Analysis.DeadCodeTest do
       {:ok, dead} = DeadCode.find_unused_exports(min_confidence: 0.0)
 
       unused_funcs = Enum.map(dead, fn d -> d.function end)
-      refute {:function, :Popular, :popular_func, 0} in unused_funcs
+      refute %{type: :function, module: :Popular, name: :popular_func, arity: 0} in unused_funcs
     end
   end
 end

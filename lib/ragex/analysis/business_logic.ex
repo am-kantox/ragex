@@ -359,13 +359,14 @@ defmodule Ragex.Analysis.BusinessLogic do
 
     severity_counts = count_by_severity(issues)
     analyzer_counts = count_by_analyzer(issues)
+    issues_count = length(issues)
 
     %{
       file: path,
       language: language,
       issues: issues,
-      has_issues?: length(issues) > 0,
-      total_issues: length(issues),
+      has_issues?: issues_count > 0,
+      total_issues: issues_count,
       critical_count: Map.get(severity_counts, :critical, 0),
       high_count: Map.get(severity_counts, :high, 0),
       medium_count: Map.get(severity_counts, :medium, 0),

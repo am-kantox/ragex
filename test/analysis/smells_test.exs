@@ -2,6 +2,8 @@ defmodule Ragex.Analysis.SmellsTest do
   use ExUnit.Case, async: true
 
   alias Ragex.Analysis.Smells
+  alias Ragex.Analyzers.Elixir, as: ElixirAnalyzer
+  alias Ragex.Graph.Store
 
   @moduletag :smells
 
@@ -313,7 +315,7 @@ defmodule Ragex.Analysis.SmellsTest do
       # Start the knowledge graph store if not already running
       case Process.whereis(Ragex.Graph.Store) do
         nil ->
-          {:ok, _pid} = Ragex.Graph.Store.start_link()
+          {:ok, _pid} = Store.start_link()
           on_exit(fn -> GenServer.stop(Ragex.Graph.Store) end)
 
         _pid ->
@@ -321,7 +323,7 @@ defmodule Ragex.Analysis.SmellsTest do
       end
 
       # Clear the store
-      Ragex.Graph.Store.clear()
+      Store.clear()
 
       :ok
     end
@@ -341,7 +343,7 @@ defmodule Ragex.Analysis.SmellsTest do
       File.write!(path, code)
 
       # First analyze to populate the knowledge graph
-      {:ok, analysis} = Ragex.Analyzers.Elixir.analyze(code, path)
+      {:ok, analysis} = ElixirAnalyzer.analyze(code, path)
       store_analysis_in_graph(analysis)
 
       # Then analyze for smells
@@ -389,7 +391,7 @@ defmodule Ragex.Analysis.SmellsTest do
       File.write!(path, code)
 
       # Analyze and populate knowledge graph
-      {:ok, analysis} = Ragex.Analyzers.Elixir.analyze(code, path)
+      {:ok, analysis} = ElixirAnalyzer.analyze(code, path)
       store_analysis_in_graph(analysis)
 
       # Analyze for smells
@@ -486,7 +488,7 @@ defmodule Ragex.Analysis.SmellsTest do
       File.write!(path, code)
 
       # Analyze and populate knowledge graph
-      {:ok, analysis} = Ragex.Analyzers.Elixir.analyze(code, path)
+      {:ok, analysis} = ElixirAnalyzer.analyze(code, path)
       store_analysis_in_graph(analysis)
 
       # Analyze for smells
@@ -494,9 +496,7 @@ defmodule Ragex.Analysis.SmellsTest do
 
       # Should find multiple smell types
       smells_with_location =
-        result.smells
-        |> Enum.filter(&Map.has_key?(&1, :location))
-        |> Enum.filter(&(&1.location != nil))
+        Enum.reject(result.smells, &is_nil(Map.get(&1, :location)))
 
       # Check that all smells with locations have consistent formatting
       for smell <- smells_with_location do
@@ -524,14 +524,14 @@ defmodule Ragex.Analysis.SmellsTest do
        }) do
     # Store modules
     Enum.each(modules, fn module ->
-      Ragex.Graph.Store.add_node(:module, module.name, module)
+      Store.add_node(:module, module.name, module)
     end)
 
     # Store functions
     Enum.each(functions, fn func ->
-      Ragex.Graph.Store.add_node(:function, {func.module, func.name, func.arity}, func)
+      Store.add_node(:function, {func.module, func.name, func.arity}, func)
       # Add edge from module to function
-      Ragex.Graph.Store.add_edge(
+      Store.add_edge(
         {:module, func.module},
         {:function, func.module, func.name, func.arity},
         :defines
@@ -540,7 +540,7 @@ defmodule Ragex.Analysis.SmellsTest do
 
     # Store call relationships
     Enum.each(calls, fn call ->
-      Ragex.Graph.Store.add_edge(
+      Store.add_edge(
         {:function, call.from_module, call.from_function, call.from_arity},
         {:function, call.to_module, call.to_function, call.to_arity},
         :calls
@@ -549,7 +549,7 @@ defmodule Ragex.Analysis.SmellsTest do
 
     # Store imports
     Enum.each(imports, fn import ->
-      Ragex.Graph.Store.add_edge(
+      Store.add_edge(
         {:module, import.from_module},
         {:module, import.to_module},
         :imports

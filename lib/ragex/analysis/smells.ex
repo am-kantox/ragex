@@ -487,7 +487,7 @@ defmodule Ragex.Analysis.Smells do
       end
 
     # If we have a line number, find the function that contains this line
-    if smell_line && length(functions_in_file) > 0 do
+    if smell_line && match?([_ | _], functions_in_file) do
       # Find the function whose line is <= smell_line and is the closest
       # (assumes functions are sorted by line)
       functions_in_file

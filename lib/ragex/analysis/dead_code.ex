@@ -545,7 +545,11 @@ defmodule Ragex.Analysis.DeadCode do
 
   # Count the number of callers for a function
   defp count_callers(func_ref) do
-    Store.get_incoming_edges(func_ref, :calls)
+    # Convert to tuple format for Store lookup
+    {module, name, arity} = extract_func_parts(func_ref)
+    tuple_ref = {:function, module, name, arity}
+
+    Store.get_incoming_edges(tuple_ref, :calls)
     |> length()
   end
 

@@ -472,7 +472,7 @@ defmodule Ragex.CLI.Output do
         |> Enum.take(10)
 
       analyzer_summary =
-        if length(top_analyzers) > 0 do
+        if match?([_ | _], top_analyzers) do
           rows =
             Enum.map(top_analyzers, fn {name, count} ->
               %{"Analyzer" => to_string(name), "Issues" => to_string(count)}
@@ -498,7 +498,7 @@ defmodule Ragex.CLI.Output do
         |> Enum.take(10)
 
       issues_table =
-        if length(top_issues) > 0 do
+        if match?([_ | _], top_issues) do
           rows =
             Enum.map(top_issues, fn issue ->
               %{
@@ -523,7 +523,7 @@ defmodule Ragex.CLI.Output do
         severity_summary,
         "\nTop Analyzers:",
         analyzer_summary,
-        if(length(top_issues) > 0, do: "\nSample Issues:", else: ""),
+        if(match?([_ | _], top_issues), do: "\nSample Issues:", else: ""),
         issues_table,
         show_more_message(total, 10)
       ]
@@ -830,7 +830,7 @@ defmodule Ragex.CLI.Output do
       |> Enum.sort_by(fn {_, deps} -> deps end, :desc)
       |> Enum.take(10)
 
-    if length(top_modules) > 0 do
+    if match?([_ | _], top_modules) do
       rows =
         Enum.map(top_modules, fn {mod, deps} ->
           %{"Module" => to_string(mod), "Dependencies" => to_string(deps)}
@@ -881,7 +881,7 @@ defmodule Ragex.CLI.Output do
       ]
       |> Enum.reject(fn {_, v} -> is_nil(v) end)
 
-    if length(components) > 0 do
+    if match?([_ | _], components) do
       rows =
         Enum.map(components, fn {name, value} ->
           score_val = if is_number(value), do: Float.round(value * 1.0, 1), else: value
@@ -1088,11 +1088,12 @@ defmodule Ragex.CLI.Output do
     formatted_locs =
       locations
       |> Enum.take(2)
-      |> Enum.map(&format_single_duplicate_location(&1, max_per_location))
-      |> Enum.join(" ↔ ")
+      |> Enum.map_join(" ↔ ", &format_single_duplicate_location(&1, max_per_location))
 
-    if length(locations) > 2 do
-      "#{formatted_locs} (+#{length(locations) - 2} more)"
+    locations_len = length(locations)
+
+    if locations_len > 2 do
+      "#{formatted_locs} (+#{locations_len - 2} more)"
     else
       formatted_locs
     end
