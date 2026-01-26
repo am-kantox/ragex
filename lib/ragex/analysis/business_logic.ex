@@ -354,7 +354,7 @@ defmodule Ragex.Analysis.BusinessLogic do
     # Convert Metastatic issues to our format
     issues =
       report.issues
-      |> Enum.map(&format_issue/1)
+      |> Enum.map(&format_issue(&1, path))
       |> filter_by_severity(min_severity)
 
     severity_counts = count_by_severity(issues)
@@ -376,13 +376,18 @@ defmodule Ragex.Analysis.BusinessLogic do
     }
   end
 
-  defp format_issue(meta_issue) do
-    message = Map.get(meta_issue, :description) || Map.get(meta_issue, :message, "No description")
+  defp format_issue(meta_issue, file_path) do
+    # Metastatic v0.5.0+ uses :message, older versions used :description
+    message = Map.get(meta_issue, :message) || Map.get(meta_issue, :description, "No description")
+
+    # Normalize severity levels - Metastatic may use :warning, :error, etc.
+    # Ragex uses: :critical, :high, :medium, :low, :info
+    severity = normalize_severity(meta_issue.severity)
 
     %{
       analyzer: meta_issue.analyzer,
       category: meta_issue.category,
-      severity: meta_issue.severity,
+      severity: severity,
       message: message,
       description: message,
       suggestion: Map.get(meta_issue, :suggestion),
@@ -390,7 +395,7 @@ defmodule Ragex.Analysis.BusinessLogic do
       location: format_location(meta_issue.location),
       line: get_in(meta_issue, [:location, :line]),
       column: get_in(meta_issue, [:location, :column]),
-      file: Map.get(meta_issue, :file)
+      file: file_path
     }
   end
 
@@ -403,6 +408,17 @@ defmodule Ragex.Analysis.BusinessLogic do
       function: Map.get(loc, :function)
     }
   end
+
+  # Normalize Metastatic severity levels to Ragex standard levels
+  defp normalize_severity(:error), do: :critical
+  defp normalize_severity(:warning), do: :medium
+  defp normalize_severity(:critical), do: :critical
+  defp normalize_severity(:high), do: :high
+  defp normalize_severity(:medium), do: :medium
+  defp normalize_severity(:low), do: :low
+  defp normalize_severity(:info), do: :info
+  # Default to medium for unknown
+  defp normalize_severity(_), do: :medium
 
   defp filter_by_severity(issues, :info), do: issues
 
@@ -429,15 +445,27 @@ defmodule Ragex.Analysis.BusinessLogic do
   end
 
   defp find_source_files(path, recursive) do
-    pattern =
-      if recursive do
-        Path.join([path, "**", "*.{ex,exs,erl,hrl,py,rb,hs}"])
-      else
-        Path.join([path, "*.{ex,exs,erl,hrl,py,rb,hs}"])
-      end
+    cond do
+      # If path is a file, return it directly
+      File.regular?(path) ->
+        {:ok, [path]}
 
-    files = Path.wildcard(pattern)
-    {:ok, files}
+      # If path is a directory, use wildcard
+      File.dir?(path) ->
+        pattern =
+          if recursive do
+            Path.join([path, "**", "*.{ex,exs,erl,hrl,py,rb,hs}"])
+          else
+            Path.join([path, "*.{ex,exs,erl,hrl,py,rb,hs}"])
+          end
+
+        files = Path.wildcard(pattern)
+        {:ok, files}
+
+      # Path doesn't exist
+      true ->
+        {:error, {:not_found, path}}
+    end
   rescue
     e -> {:error, {:wildcard_failed, e}}
   end
