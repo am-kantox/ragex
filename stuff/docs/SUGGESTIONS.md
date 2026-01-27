@@ -569,7 +569,6 @@ mix ragex.analyze lib/ --format=json > suggestions.json
 ## See Also
 
 - [ANALYSIS.md](./ANALYSIS.md) - Code analysis capabilities
-- [ADVANCED_REFACTOR_MCP.md](./ADVANCED_REFACTOR_MCP.md) - Refactoring operations
 - [ALGORITHMS.md](./ALGORITHMS.md) - Graph algorithms
 - [STREAMING.md](./STREAMING.md) - RAG streaming responses
 

@@ -1,6 +1,6 @@
 # ragex.nvim
 
-Full-featured NeoVim/LunarVim plugin for [Ragex](https://github.com/am-kantox/ragex) - Hybrid RAG system for multi-language codebase analysis.
+Full-featured NeoVim/LunarVim plugin for [Ragex](https://github.com/Oeditus/ragex) - Hybrid RAG system for multi-language codebase analysis.
 
 ## Features
 
@@ -20,7 +20,7 @@ Full-featured NeoVim/LunarVim plugin for [Ragex](https://github.com/am-kantox/ra
 ## Requirements
 
 - NeoVim 0.9+ or LunarVim
-- [Ragex](https://github.com/am-kantox/ragex) MCP server running
+- [Ragex](https://github.com/Oeditus/ragex) MCP server running
 - Elixir 1.19+ (for Ragex server)
 - Telescope.nvim (for UI)
 - plenary.nvim (for async operations)
@@ -32,7 +32,7 @@ Full-featured NeoVim/LunarVim plugin for [Ragex](https://github.com/am-kantox/ra
 
 ```lua
 {
-  "am-kantox/ragex.nvim",
+  "Oeditus/ragex.nvim",
   dependencies = {
     "nvim-telescope/telescope.nvim",
     "nvim-lua/plenary.nvim",
@@ -51,7 +51,7 @@ Full-featured NeoVim/LunarVim plugin for [Ragex](https://github.com/am-kantox/ra
 
 ```lua
 use {
-  "am-kantox/ragex.nvim",
+  "Oeditus/ragex.nvim",
   requires = {
     "nvim-telescope/telescope.nvim",
     "nvim-lua/plenary.nvim",
@@ -69,7 +69,7 @@ Add to your `~/.config/lvim/config.lua`:
 ```lua
 lvim.plugins = {
   {
-    "am-kantox/ragex.nvim",
+    "Oeditus/ragex.nvim",
     dependencies = {
       "nvim-telescope/telescope.nvim",
       "nvim-lua/plenary.nvim",
@@ -87,7 +87,7 @@ lvim.plugins = {
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/am-kantox/ragex.nvim ~/.local/share/nvim/site/pack/plugins/start/ragex.nvim
+   git clone https://github.com/Oeditus/ragex.nvim ~/.local/share/nvim/site/pack/plugins/start/ragex.nvim
    ```
 
 2. Add to your init.lua:
@@ -420,13 +420,13 @@ MIT
 
 ## Related Projects
 
-- [Ragex](https://github.com/am-kantox/ragex) - The MCP server powering this plugin
+- [Ragex](https://github.com/Oeditus/ragex) - The MCP server powering this plugin
 - [telescope.nvim](https://github.com/nvim-telescope/telescope.nvim) - Fuzzy finder UI
 - [LunarVim](https://www.lunarvim.org/) - NeoVim distribution
 
 ## Credits
 
-Created by Aleksei Matiushkin (@am-kantox)
+Created by Aleksei Matiushkin (@Oeditus)
 
 Built on top of:
 - Elixir/OTP ecosystem

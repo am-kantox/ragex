@@ -896,9 +896,6 @@ end)
 ## Further Reading
 
 - [Metastatic Documentation](https://github.com/oeditus/metastatic)
-- [Phase 11 Completion Notes](stuff/phases/PHASE11_COMPLETE.md)
-- [WARP.md](WARP.md) - Development guidelines
-- [ADVANCED_REFACTOR_MCP.md](ADVANCED_REFACTOR_MCP.md) - Refactoring tools
 
 ---
 

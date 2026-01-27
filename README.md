@@ -411,7 +411,7 @@ Ragex is an MCP (Model Context Protocol) server that analyzes codebases using co
       ▹ MCP Tools: `analyze_quality`, `quality_report`, `find_complex_code`
 
     ▸ Documentation  
-      ▹ Comprehensive Guide: See [ANALYSIS.md](ANALYSIS.md) for complete API documentation  
+      ▹ Comprehensive Guide: See [ANALYSIS](stuff/docs/ANALYSIS.md) for complete API documentation  
       ▹ Analysis Approaches: AST-based vs embedding-based strategies  
       ▹ Usage Examples: API and MCP tool examples with code snippets  
       ▹ Best Practices: Threshold recommendations, workflow tips  
@@ -727,7 +727,7 @@ The demo generates 11 detailed reports showing:
 - 8 prioritized refactoring suggestions
 - Expected improvement: 65% better maintainability
 
-See [`examples/product_cart/README.md`](examples/product_cart/README.md) for full details and [`DEMO.md`](examples/product_cart/DEMO.md) for step-by-step walkthrough.
+See [Produce Cart’s README](examples/product_cart/README.md) for full details and [Product Cart’s DEMO](examples/product_cart/DEMO.md) for step-by-step walkthrough.
 
 ## Usage
 
@@ -739,7 +739,7 @@ Run the server (it will listen on both stdin and socket):
 ./start_mcp.sh
 ```
 
-**Note**: The stdio server is validated and production-ready. See [STDIO_VALIDATION.md](STDIO_VALIDATION.md) for testing details and MCPHub integration guide.
+**Note**: The stdio server is validated and production-ready.
 
 ### Auto-Analyze Directories on Startup
 
@@ -752,7 +752,7 @@ config :ragex, :auto_analyze_dirs, [
 ]
 ```
 
-This pre-loads your frequently used codebases into the knowledge graph, making them immediately available for querying. See [CONFIGURATION.md](stuff/docs/CONFIGURATION.md#auto-analyze-directories) for details.
+This pre-loads your frequently used codebases into the knowledge graph, making them immediately available for querying. See [CONFIGURATION](stuff/docs/CONFIGURATION.md#auto-analyze-directories) for details.
 
 ### MCP Protocol Example
 
