@@ -1,4 +1,4 @@
-# <img width="144" height="144" alt="logo-notext-144x144-transparent" src="https://github.com/user-attachments/assets/9787c8a8-c0bf-46c0-94cb-cceda2c1ec11" /> Ragex
+# ![Ragex Logo](https://github.com/user-attachments/assets/9787c8a8-c0bf-46c0-94cb-cceda2c1ec11) Ragex
 
 **Hybrid Retrieval-Augmented Generation for Multi-Language Codebases**
 
@@ -468,17 +468,17 @@ Ragex is an MCP (Model Context Protocol) server that analyzes codebases using co
 
 ### Planned Features
 
-- [x] Streaming RAG responses
-- [x] MCP streaming notifications
-- [x] MetaAST-enhanced retrieval
-- [x] Code quality analysis
-- [x] Impact analysis and risk assessment
-- [x] CLI improvements (interactive wizards, dashboard, completions, man pages)
-- [ ] Provider health checks and auto-failover
-- [ ] Production optimizations
-- [ ] Additional language support
-- [ ] Cross-language refactoring via Metastatic
-- [ ] Enhanced editor integrations
+- [✓] Streaming RAG responses
+- [✓] MCP streaming notifications
+- [✓] MetaAST-enhanced retrieval
+- [✓] Code quality analysis
+- [✓] Impact analysis and risk assessment
+- [✓] CLI improvements (interactive wizards, dashboard, completions, man pages)
+- [✗] Provider health checks and auto-failover
+- [✗] Production optimizations
+- [✗] Additional language support
+- [✗] Cross-language refactoring via Metastatic
+- [✗] Enhanced editor integrations
 
 ## Architecture
 

@@ -151,16 +151,19 @@ defmodule Ragex.MixProject do
         Ragex.Analysis,
         Ragex.Analysis.Suggestions,
         Ragex.Analyzers,
+        Ragex.CLI,
         Ragex.Editor,
         Ragex.Embeddings,
         Ragex.Graph,
         Ragex.MCP,
         Ragex.MCP.Handlers,
+        Ragex.RAG,
         Ragex.Retrieval
       ],
       authors: ["Aleksei Matiushkin"],
       canonical: "https://hexdocs.pm/#{@app}",
-      skip_undefined_reference_warnings_on: []
+      skip_undefined_reference_warnings_on: [],
+      before_closing_body_tag: &before_closing_body_tag/1
     ]
   end
 
@@ -187,6 +190,9 @@ defmodule Ragex.MixProject do
         Ragex.Application
       ],
       "MCP Server": [
+        Ragex.MCP.Debug,
+        Ragex.MCP.SingleRequest,
+        Ragex.MCP.SocketServer,
         Ragex.MCP.Server,
         Ragex.MCP.Protocol,
         Ragex.MCP.Handlers.Initialization,
@@ -202,19 +208,30 @@ defmodule Ragex.MixProject do
         Ragex.Analyzers.Detector
       ],
       "Knowledge Graph": [
+        Ragex.Graph.Algorithms,
         Ragex.Graph.Store,
-        Ragex.Graph.Algorithms
-      ],
-      "Embeddings & ML": [
-        Ragex.Embeddings.Generator,
-        Ragex.Embeddings.ModelRegistry,
-        Ragex.Embeddings.Persistence,
-        Ragex.Embeddings.FileTracker,
         Ragex.VectorStore
       ],
-      "Retrieval & Search": [
+      "Embeddings & ML": [
+        Ragex.Embeddings.Behaviour,
+        Ragex.Embeddings.Bumblebee,
+        Ragex.Embeddings.FileTracker,
+        Ragex.Embeddings.Generator,
+        Ragex.Embeddings.Helper,
+        Ragex.Embeddings.ModelRegistry,
+        Ragex.Embeddings.Persistence,
+        Ragex.Embeddings.Registry,
+        Ragex.Embeddings.TextGenerator
+      ],
+      RAG: [
+        Ragex.RAG.ContextBuilder,
+        Ragex.RAG.Pipeline,
+        Ragex.RAG.PromptTemplate,
         Ragex.Retrieval.Hybrid,
-        Ragex.Retrieval.Strategies
+        Ragex.Retrieval.Strategies,
+        Ragex.Retrieval.CrossLanguage,
+        Ragex.Retrieval.MetaASTRanker,
+        Ragex.Retrieval.QueryExpansion
       ],
       "Code Editing": [
         Ragex.Editor.Core,
@@ -223,7 +240,21 @@ defmodule Ragex.MixProject do
         Ragex.Editor.Validator,
         Ragex.Editor.Transaction,
         Ragex.Editor.Refactor,
-        Ragex.Editor.Advanced
+        Ragex.Editor.Advanced,
+        Ragex.Editor.Conflict,
+        Ragex.Editor.Diff,
+        Ragex.Editor.Formatter,
+        Ragex.Editor.Preview,
+        Ragex.Editor.Refactor.AIPreview,
+        Ragex.Editor.Refactor.Elixir,
+        Ragex.Editor.Report,
+        Ragex.Editor.Undo,
+        Ragex.Editor.ValidationAI,
+        Ragex.Editor.Validators.Elixir,
+        Ragex.Editor.Validators.Erlang,
+        Ragex.Editor.Validators.Javascript,
+        Ragex.Editor.Validators.Python,
+        Ragex.Editor.Visualize
       ],
       "Code Analysis & Quality": [
         Ragex.Analysis.Duplication,
@@ -234,9 +265,31 @@ defmodule Ragex.MixProject do
         Ragex.Analysis.Suggestions.Patterns,
         Ragex.Analysis.Suggestions.Ranker,
         Ragex.Analysis.Suggestions.Actions,
-        Ragex.Analysis.Suggestions.RAGAdvisor
+        Ragex.Analysis.Suggestions.RAGAdvisor,
+        Ragex.Analysis.BusinessLogic,
+        Ragex.Analysis.DeadCode.AIRefiner,
+        Ragex.Analysis.DependencyGraph.AIInsights,
+        Ragex.Analysis.Duplication.AIAnalyzer,
+        Ragex.Analysis.MetastaticBridge,
+        Ragex.Analysis.Quality,
+        Ragex.Analysis.QualityStore,
+        Ragex.Analysis.Security,
+        Ragex.Analysis.Smells,
+        Ragex.Analyzers.Behaviour,
+        Ragex.Analyzers.Directory,
+        Ragex.Analyzers.Metastatic
       ],
       "AI Features": [
+        Ragex.AI.Behaviour,
+        Ragex.AI.Cache,
+        Ragex.AI.Config,
+        Ragex.AI.Provider.Anthropic,
+        Ragex.AI.Provider.DeepSeekR1,
+        Ragex.AI.Provider.Ollama,
+        Ragex.AI.Provider.OpenAI,
+        Ragex.AI.Provider.Registry,
+        Ragex.AI.Registry,
+        Ragex.AI.Usage,
         Ragex.AI.Features.Config,
         Ragex.AI.Features.Context,
         Ragex.AI.Features.Cache,
@@ -245,7 +298,38 @@ defmodule Ragex.MixProject do
         Ragex.AI.Features.AIRefiner,
         Ragex.AI.Features.AIAnalyzer,
         Ragex.AI.Features.AIInsights
+      ],
+      CLI: [
+        Ragex.CLI.Colors,
+        Ragex.CLI.Output,
+        Ragex.CLI.Progress,
+        Ragex.CLI.Prompt
+      ],
+      Utilities: [
+        Ragex.Watcher
       ]
     ]
   end
+
+  defp before_closing_body_tag(:html) do
+    """
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.min.js"></script>
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        mermaid.initialize({
+          startOnLoad: true,
+          theme: "default",
+          flowchart: {
+            useMaxWidth: true,
+            htmlLabels: true,
+            curve: "basis"
+          }
+        });
+        window.mermaid = mermaid;
+      });
+    </script>
+    """
+  end
+
+  defp before_closing_body_tag(_), do: ""
 end
