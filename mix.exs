@@ -71,9 +71,9 @@ defmodule Ragex.MixProject do
       # AI Provider
       {:req, "~> 0.5"},
       # Metastatic MetaAST
-      case System.get_env("GITHUB_ACTIONS") do
-        nil -> {:metastatic, path: "../metastatic"}
-        _ -> {:metastatic, "~> 0.5"}
+      case System.get_env("LOCAL_METASTATIC") do
+        nil -> {:metastatic, "~> 0.5"}
+        _ -> {:metastatic, path: "../metastatic"}
       end,
       # Development and documentation
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
