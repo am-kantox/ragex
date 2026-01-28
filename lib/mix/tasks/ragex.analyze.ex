@@ -105,16 +105,19 @@ defmodule Mix.Tasks.Ragex.Analyze do
 
     config = build_config(opts)
 
-    if config.verbose do
+    # Only show progress messages if not JSON format
+    show_progress = config.format != "json"
+
+    if config.verbose and show_progress do
       info_msg("Ragex Comprehensive Analysis")
       Mix.shell().info("")
     end
 
     # Step 1: Analyze directory and build knowledge graph
-    header_msg("Step 1: Analyzing directory...")
+    if show_progress, do: header_msg("Step 1: Analyzing directory...")
     analyze_result = analyze_directory(config)
 
-    if config.verbose do
+    if config.verbose and show_progress do
       success_msg(
         "  ✓ Analyzed #{analyze_result.files_analyzed} files (#{analyze_result.entities_found} entities)"
       )
@@ -216,14 +219,15 @@ defmodule Mix.Tasks.Ragex.Analyze do
   # Run all enabled analyses
   defp run_analyses(config, _analyze_result) do
     results = %{}
+    show_progress = config.format != "json"
 
     results =
       if config.analyses.security do
-        header_msg("Step 2.1: Security Analysis...")
+        if show_progress, do: header_msg("Step 2.1: Security Analysis...")
 
         security_result = run_security_analysis(config)
 
-        if config.verbose do
+        if config.verbose and show_progress do
           success_msg("  ✓ Found #{length(security_result.issues)} security issues")
         end
 
@@ -234,11 +238,11 @@ defmodule Mix.Tasks.Ragex.Analyze do
 
     results =
       if config.analyses.business_logic do
-        header_msg("Step 2.2: Business Logic Analysis...")
+        if show_progress, do: header_msg("Step 2.2: Business Logic Analysis...")
 
         bl_result = run_business_logic_analysis(config)
 
-        if config.verbose do
+        if config.verbose and show_progress do
           success_msg("  ✓ Found #{bl_result.total_issues} business logic issues")
         end
 
@@ -249,10 +253,10 @@ defmodule Mix.Tasks.Ragex.Analyze do
 
     results =
       if config.analyses.complexity do
-        header_msg("Step 2.3: Complexity Analysis...")
+        if show_progress, do: header_msg("Step 2.3: Complexity Analysis...")
         complexity_result = run_complexity_analysis(config)
 
-        if config.verbose do
+        if config.verbose and show_progress do
           success_msg(
             "  ✓ Found #{length(complexity_result.complex_functions)} complex functions"
           )
@@ -265,10 +269,10 @@ defmodule Mix.Tasks.Ragex.Analyze do
 
     results =
       if config.analyses.smells do
-        header_msg("Step 2.4: Code Smell Detection...")
+        if show_progress, do: header_msg("Step 2.4: Code Smell Detection...")
         smells_result = run_smells_analysis(config)
 
-        if config.verbose do
+        if config.verbose and show_progress do
           success_msg("  ✓ Found #{length(smells_result.smells)} code smells")
         end
 
@@ -279,10 +283,10 @@ defmodule Mix.Tasks.Ragex.Analyze do
 
     results =
       if config.analyses.duplicates do
-        header_msg("Step 2.5: Duplication Detection...")
+        if show_progress, do: header_msg("Step 2.5: Duplication Detection...")
         duplicates_result = run_duplicates_analysis(config)
 
-        if config.verbose do
+        if config.verbose and show_progress do
           success_msg("  ✓ Found #{length(duplicates_result.duplicates)} duplicate blocks")
         end
 
@@ -293,10 +297,10 @@ defmodule Mix.Tasks.Ragex.Analyze do
 
     results =
       if config.analyses.dead_code do
-        header_msg("Step 2.6: Dead Code Analysis...")
+        if show_progress, do: header_msg("Step 2.6: Dead Code Analysis...")
         dead_code_result = run_dead_code_analysis(config)
 
-        if config.verbose do
+        if config.verbose and show_progress do
           success_msg("  ✓ Found #{length(dead_code_result.dead_functions)} dead functions")
         end
 
@@ -307,10 +311,10 @@ defmodule Mix.Tasks.Ragex.Analyze do
 
     results =
       if config.analyses.dependencies do
-        header_msg("Step 2.7: Dependency Analysis...")
+        if show_progress, do: header_msg("Step 2.7: Dependency Analysis...")
         deps_result = run_dependencies_analysis(config)
 
-        if config.verbose do
+        if config.verbose and show_progress do
           success_msg("  ✓ Analyzed #{map_size(deps_result.modules)} modules")
         end
 
@@ -321,10 +325,10 @@ defmodule Mix.Tasks.Ragex.Analyze do
 
     results =
       if config.analyses.quality do
-        header_msg("Step 2.8: Quality Metrics...")
+        if show_progress, do: header_msg("Step 2.8: Quality Metrics...")
         quality_result = run_quality_analysis(config)
 
-        if config.verbose do
+        if config.verbose and show_progress do
           success_msg("  ✓ Overall quality score: #{quality_result.overall_score}/100")
         end
 
@@ -429,12 +433,13 @@ defmodule Mix.Tasks.Ragex.Analyze do
 
     case config.output do
       nil ->
-        Mix.shell().info("")
+        # Only add blank line for non-JSON output
+        if config.format != "json", do: Mix.shell().info("")
         Mix.shell().info(content)
 
       file ->
         File.write!(file, content)
-        success_msg("\n✓ Report written to #{file}")
+        if config.format != "json", do: success_msg("\n✓ Report written to #{file}")
     end
   end
 
