@@ -1,3 +1,5 @@
+# credo:disable-for-this-file Credo.Check.Refactor.Apply
+
 defmodule Mix.Tasks.Ragex.Analyze do
   @moduledoc """
   Performs comprehensive analysis on a directory.
